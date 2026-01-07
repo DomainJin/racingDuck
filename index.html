@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Đua Vịt 🦆</title>
+    <link rel="stylesheet" href="style.css?v=25">
+</head>
+<body>
+    <div class="container">
+        <h1>🦆 GAME ĐUA VỊT 🦆</h1>
+        
+        <!-- Big Timer Display -->
+        <div class="big-timer hidden" id="bigTimer">
+            <div class="timer-display">00:00:30</div>
+        </div>
+        
+        <!-- Statistics Panel -->
+        <div class="stats-panel" id="statsPanel">
+            <div class="stat-item">
+                <span class="stat-label">Tổng số trận:</span>
+                <span class="stat-value" id="totalRaces">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Top 3 Finishes:</span>
+                <span class="stat-value" id="top3Count">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Win Rate:</span>
+                <span class="stat-value" id="winRate">0%</span>
+            </div>
+        </div>
+
+        <!-- Cài đặt game -->
+        <div class="settings-panel" id="settingsPanel">
+            <h2>Cài Đặt Cuộc Đua</h2>
+            <div class="input-group">
+                <label for="duckCount">Số lượng vịt:</label>
+                <input type="number" id="duckCount" min="10" max="1000" value="300">
+            </div>
+            <div class="input-group">
+                <label for="duckNamesFile">File danh sách (CSV/Excel):</label>
+                <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)">
+                <small style="color: #888;">Tải file CSV với cột STT và Họ tên</small>
+            </div>
+            <div class="input-group">
+                <label for="soundToggle">
+                    <input type="checkbox" id="soundToggle" checked> Bật âm thanh
+                </label>
+            </div>
+            <button class="btn btn-primary" onclick="game.startRace()">Bắt Đầu Đua</button>
+        </div>
+
+        <!-- Thông tin đua -->
+        <div class="race-info hidden" id="raceInfo">
+            <div class="info-item">
+                <span class="label">Trận đua:</span>
+                <span id="raceNumber" class="value">#1</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Thời gian còn lại:</span>
+                <span id="timeLeft" class="value">30s</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Trạng thái:</span>
+                <span id="raceStatus" class="value">Chờ bắt đầu</span>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="control-panel hidden" id="controlPanel">
+            <button class="btn btn-small" onclick="game.toggleFullscreen()" id="fullscreenBtn">🔲 Fullscreen</button>
+            <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Tạm dừng</button>
+            <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Tiếp tục</button>
+            <button class="btn btn-small" onclick="game.toggleReplay()" id="replayBtn" disabled>🔄 Replay</button>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="race-container">
+            <!-- Hybrid Approach: DOM-based racing track -->
+            <div class="race-track hidden" id="raceTrack">
+                <div class="bank-top" id="bankTop"></div>
+                <div class="race-river" id="raceRiver">
+                    <div class="water-flow"></div>
+                    <div class="water-ripples"></div>
+                    <div class="fish-layer" id="fishLayer">
+                        <div class="fish fish-1">🐟</div>
+                        <div class="fish fish-2">🐠</div>
+                        <div class="fish fish-3">🐡</div>
+                        <div class="fish fish-4">🐟</div>
+                        <div class="fish fish-5">🐠</div>
+                    </div>
+                    <!-- Ducks will be added here dynamically -->
+                </div>
+                <div class="bank-bot" id="bankBot"></div>
+                <div class="finish-line hidden" id="finishLine">FINISH</div>
+            </div>
+
+            <!-- Mini Map -->
+            <div class="minimap hidden" id="minimap">
+                <h4>📍 Mini Map</h4>
+                <div class="minimap-track" id="minimapTrack">
+                    <div class="minimap-start"></div>
+                    <div class="minimap-finish"></div>
+                    <div class="minimap-ducks" id="minimapDucks"></div>
+                    <div class="minimap-viewport" id="minimapViewport"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bảng xếp hạng -->
+        <div class="leaderboard hidden" id="leaderboard">
+            <h3>🏆 Bảng Xếp Hạng Top 30</h3>
+            <div id="leaderboardList"></div>
+        </div>
+
+        <!-- Highlights Panel -->
+        <div class="highlights-panel hidden" id="highlightsPanel">
+            <h3>⚡ Highlights</h3>
+            <div id="highlightsList"></div>
+        </div>
+
+        <!-- Kết quả -->
+        <div class="result-panel hidden" id="resultPanel">
+            <h2 id="resultTitle">Kết Quả</h2>
+            <div id="resultMessage"></div>
+            <div class="result-actions">
+                <button class="btn btn-primary" onclick="game.reset()">Đua Lại</button>
+                <button class="btn btn-secondary" onclick="game.viewHistory()">Xem Lịch Sử</button>
+            </div>
+        </div>
+
+        <!-- Race History -->
+        <div class="history-panel hidden" id="historyPanel">
+            <h2>📊 Lịch Sử Các Trận Đua</h2>
+            <div id="historyList"></div>
+            <button class="btn btn-primary" onclick="game.closeHistory()">Đóng</button>
+        </div>
+    </div>
+
+    <!-- Victory Popup (outside container for max z-index) -->
+    <div class="victory-popup hidden" id="victoryPopup">
+        <div class="victory-overlay" onclick="game.closeVictoryPopup()"></div>
+        <div class="victory-content">
+            <div class="victory-header">
+                <h1>🎉 CHIẾN THẮNG! 🎉</h1>
+            </div>
+            <div class="victory-body">
+                <div class="winner-icon" id="winnerIcon"></div>
+                <h2 class="winner-name" id="winnerName">Winner Name</h2>
+                <div class="winner-stats" id="winnerStats"></div>
+            </div>
+            <div class="victory-footer">
+                <button class="btn btn-primary" onclick="game.closeVictoryPopup()">Tiếp Tục</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js?v=22"></script>
+    <script>
+        // Debug: Check if game object exists
+        window.addEventListener('load', function() {
+            console.log('Page loaded');
+            console.log('Game object exists:', typeof game !== 'undefined');
+            if (typeof game !== 'undefined') {
+                console.log('Game initialized successfully');
+            } else {
+                console.error('Game object not found! Check game.js for errors.');
+            }
+        });
+    </script>
+</body>
+</html>
