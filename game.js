@@ -224,7 +224,7 @@ class Game {
     constructor() {
         this.ducks = [];
         this.duckCount = 300;
-        this.raceDuration = 20;
+        this.raceDuration = 30;
         
         this.trackContainer = null;
         this.duckElements = new Map();
@@ -818,7 +818,7 @@ class Game {
         }
 
         // Update background offset continuously
-        this.backgroundOffset += 8; // Constant scroll speed
+        this.backgroundOffset += 15; // Constant scroll speed
         
         this.updateDuckPositions();
         this.updateBackgrounds();
