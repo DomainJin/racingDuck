@@ -218,7 +218,7 @@ class Game {
     constructor() {
         this.ducks = [];
         this.duckCount = 300;
-        this.raceDuration = 30;
+        this.raceDuration = 10;
         
         this.trackContainer = null;
         this.duckElements = new Map();
@@ -235,6 +235,7 @@ class Game {
         this.soundManager = new SoundManager();
         
         this.cameraOffset = 0;
+        this.backgroundOffset = 0;
         this.viewportWidth = 0;
         this.trackHeight = 0;
         this.isFullscreen = false;
@@ -354,7 +355,7 @@ class Game {
 
     setupRace() {
         this.duckCount = parseInt(document.getElementById('duckCount').value);
-        this.raceDuration = 30;
+        this.raceDuration = parseInt(document.getElementById('raceDuration').value) || 10;
         this.soundManager.setEnabled(document.getElementById('soundToggle').checked);
 
         if (this.duckCount < 10 || this.duckCount > 1000) {
@@ -375,6 +376,7 @@ class Game {
         const maxDuckSpeed = 4.0;
         this.trackLength = maxDuckSpeed * fps * this.raceDuration;
         this.cameraOffset = 0;
+        this.backgroundOffset = 0;
         
         // Add resize handler for responsive scaling
         this.resizeHandler = () => {
@@ -618,14 +620,14 @@ class Game {
         
         if (this.rankings.length > 0) {
             const leader = this.rankings[0];
-            const leaderProgress = leader.position / this.trackLength;
+            const distanceToFinish = this.trackLength - leader.position;
             
             let targetCameraOffset;
             let cameraMaxOffset;
             let cameraSpeed;
             
-            if (leaderProgress >= 0.85) {
-                // When approaching finish, move camera to center the finish line
+            if (distanceToFinish <= 500) {
+                // When within 500px of finish, move camera to center the finish line
                 targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
                 // Allow camera to move beyond normal max to center the finish line
                 cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
@@ -656,6 +658,9 @@ class Game {
             });
         }
 
+        // Update background offset continuously
+        this.backgroundOffset += 3.5; // Constant scroll speed
+        
         this.updateDuckPositions();
         this.updateBackgrounds();
         this.updateMinimap();
@@ -682,13 +687,13 @@ class Game {
         const bankBot = document.getElementById('bankBot');
         
         if (raceRiver) {
-            // River moves at same speed as camera
-            raceRiver.style.backgroundPosition = `${-this.cameraOffset}px 0`;
+            // River moves continuously independent of camera
+            raceRiver.style.backgroundPosition = `${-this.backgroundOffset}px 0`;
         }
         
         if (bankTop && bankBot) {
-            // Banks move slower (parallax effect) - 60% of camera speed
-            const bankOffset = this.cameraOffset * 0.6;
+            // Banks move slower (parallax effect) - 60% of river speed
+            const bankOffset = this.backgroundOffset * 0.6;
             bankTop.style.backgroundPosition = `${-bankOffset}px 0`;
             bankBot.style.backgroundPosition = `${-bankOffset}px 0`;
         }
