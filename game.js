@@ -1140,6 +1140,11 @@ class Game {
         html += '</div>';
         
         document.getElementById('resultMessage').innerHTML = html;
+        
+        // Tự động cuộn đến panel kết quả
+        setTimeout(() => {
+            resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     }
 
     resetHistory() {

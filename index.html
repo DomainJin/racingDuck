@@ -66,6 +66,7 @@
             <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Tiếp tục</button>
             <button class="btn btn-small" onclick="game.toggleReplay()" id="replayBtn" disabled>🔄 Replay</button>
             <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBtn">🎯 Tiếp Tục Giải Tiếp Theo</button>
+            <button class="btn btn-secondary" onclick="game.showWinnersPanel()" id="viewResultsBtn">📋 Xem Kết Quả</button>
         </div>
 
         <!-- Main Content Area -->
@@ -124,10 +125,10 @@
         <div class="result-panel hidden" id="resultPanel">
             <h2 id="resultTitle">Kết Quả</h2>
             <div id="resultMessage"></div>
-            <div class="result-actions">
+            <!-- <div class="result-actions">
                 <button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>
                 <button class="btn btn-secondary" onclick="game.viewHistory()">📜 Xem Lịch Sử</button>
-            </div>
+            </div> -->
         </div>
 
         <!-- Race History -->
@@ -152,7 +153,7 @@
             </div>
             <div class="victory-footer">
                 <button class="btn btn-primary" onclick="game.continueRace()">🎯 Tiếp Tục (Giải Tiếp Theo)</button>
-                <button class="btn btn-secondary" onclick="game.showWinnersPanel(); game.closeVictoryPopup()">📋 Xem Kết Quả</button>
+                <button class="btn btn-secondary" onclick="game.closeVictoryPopup(); game.showWinnersPanel()">📋 Xem Kết Quả</button>
             </div>
         </div>
     </div>
