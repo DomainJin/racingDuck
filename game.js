@@ -1,3 +1,6 @@
+// Finish line offset - distance from duck nose to right edge of 150px icon
+const FINISH_LINE_OFFSET = 100;
+
 // Sound system
 class SoundManager {
     constructor() {
@@ -188,10 +191,10 @@ class Duck {
                 return p.life > 0;
             });
             
-            // Visual duck nose is ~20px before the right edge of 150px icon
+            // Visual duck nose is ~FINISH_LINE_OFFSET px before the right edge of 150px icon
             // Allow duck to pass finish line by checking when left edge crosses
-            if (this.position >= this.trackLength - 20) {
-                this.position = this.trackLength - 20;
+            if (this.position >= this.trackLength - FINISH_LINE_OFFSET) {
+                this.position = this.trackLength - FINISH_LINE_OFFSET;
                 this.finished = true;
                 this.finishTime = Date.now();
             }
@@ -242,21 +245,27 @@ class Game {
         
         this.stats = this.loadStats();
         this.currentRaceNumber = this.stats.totalRaces + 1;
-        this.highlights = [];
+        // this.highlights = [];
         this.raceHistory = [];
         
         this.duckNames = [];
+        this.activeDuckNames = []; // Danh sách vịt đang tham gia (sẽ giảm dần)
+        this.winners = this.loadWinners(); // Danh sách các vịt đã thắng
+        this.excludedDucks = []; // Danh sách các vịt bị loại
         
         this.replayMode = false;
         this.replayData = [];
         this.replayFrame = 0;
         
         this.duckImages = [];
-        this.iconCount = 30;
+        this.iconCount = 0; // Sẽ được tự động phát hiện
         this.imagesLoaded = false;
+        this.currentTheme = 'output_1'; // Theme mặc định
         
-        this.updateStatsDisplay();
-        this.preloadDuckImages();
+        // this.updateStatsDisplay(); // Stats panel removed
+        this.updateHistoryWin(); // Load history from localStorage
+        this.detectAvailableThemes();
+        this.detectAndLoadDuckImages();
     }
 
     loadStats() {
@@ -275,13 +284,116 @@ class Game {
         localStorage.setItem('duckRaceStats', JSON.stringify(this.stats));
     }
 
+    loadWinners() {
+        const saved = localStorage.getItem('duckRaceWinners');
+        if (saved) {
+            return JSON.parse(saved);
+        }
+        return [];
+    }
+
+    saveWinners() {
+        localStorage.setItem('duckRaceWinners', JSON.stringify(this.winners));
+    }
+
     updateStatsDisplay() {
+        // Stats panel removed - method disabled
+        return;
+        /*
         document.getElementById('totalRaces').textContent = this.stats.totalRaces;
         document.getElementById('top3Count').textContent = this.stats.top3Finishes;
         const winRate = this.stats.totalRaces > 0 
             ? ((this.stats.top3Finishes / this.stats.totalRaces) * 100).toFixed(1)
             : 0;
         document.getElementById('winRate').textContent = winRate + '%';
+        */
+    }
+
+    detectAvailableThemes() {
+        // Tự động phát hiện các thư mục output_X
+        const themeSelect = document.getElementById('iconTheme');
+        themeSelect.innerHTML = ''; // Xóa các option cũ
+        
+        let themeIndex = 1;
+        let consecutiveFails = 0;
+        const maxFails = 2;
+        
+        const checkTheme = (index) => {
+            const testImg = new Image();
+            const themeName = `output_${index}`;
+            testImg.src = `${themeName}/Input_Icon_01.png`;
+            
+            testImg.onload = () => {
+                // Thư mục tồn tại, thêm vào dropdown
+                const option = document.createElement('option');
+                option.value = themeName;
+                option.textContent = `Chủ đề ${index}`;
+                themeSelect.appendChild(option);
+                
+                consecutiveFails = 0;
+                checkTheme(index + 1);
+            };
+            
+            testImg.onerror = () => {
+                consecutiveFails++;
+                if (consecutiveFails < maxFails) {
+                    checkTheme(index + 1);
+                } else {
+                    console.log(`Detected ${themeSelect.options.length} icon themes`);
+                }
+            };
+        };
+        
+        checkTheme(themeIndex);
+    }
+
+    changeIconTheme() {
+        this.currentTheme = document.getElementById('iconTheme').value;
+        this.duckImages = [];
+        this.iconCount = 0;
+        this.imagesLoaded = false;
+        this.detectAndLoadDuckImages();
+    }
+
+    detectAndLoadDuckImages() {
+        // Tự động phát hiện số lượng icon trong thư mục hiện tại
+        let currentIndex = 1;
+        let consecutiveFails = 0;
+        const maxConsecutiveFails = 3; // Dừng sau 3 file liên tiếp không tồn tại
+        
+        const tryLoadImage = (index) => {
+            const img = new Image();
+            const paddedNum = String(index).padStart(2, '0');
+            img.src = `${this.currentTheme}/Input_Icon_${paddedNum}.png`;
+            
+            img.onload = () => {
+                this.duckImages.push(img);
+                this.iconCount = this.duckImages.length;
+                consecutiveFails = 0;
+                
+                // Cập nhật UI
+                document.getElementById('iconCount').textContent = `${this.iconCount} icon`;
+                
+                // Thử load file tiếp theo
+                tryLoadImage(index + 1);
+            };
+            
+            img.onerror = () => {
+                consecutiveFails++;
+                
+                if (consecutiveFails >= maxConsecutiveFails) {
+                    // Đã thử đủ, dừng lại
+                    this.imagesLoaded = true;
+                    console.log(`Detected and loaded ${this.iconCount} duck icons from ${this.currentTheme}!`);
+                    document.getElementById('iconCount').textContent = `${this.iconCount} icon`;
+                } else {
+                    // Thử file tiếp theo
+                    tryLoadImage(index + 1);
+                }
+            };
+        };
+        
+        tryLoadImage(currentIndex);
     }
 
     preloadDuckImages() {
@@ -339,6 +451,14 @@ class Game {
             }
             
             if (this.duckNames.length > 0) {
+                this.activeDuckNames = [...this.duckNames]; // Copy danh sách ban đầu
+                
+                // Loại bỏ các vịt đã thắng (nếu có lịch sử)
+                if (this.winners.length > 0) {
+                    const winnerNames = this.winners.map(w => w.name);
+                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                }
+                
                 document.getElementById('duckCount').value = this.duckNames.length;
                 alert(`Da tai ${this.duckNames.length} ten tu file!`);
             } else {
@@ -392,11 +512,42 @@ class Game {
         this.duckElements.clear();
 
         this.ducks = [];
-        this.highlights = [];
+        // this.highlights = [];
         this.replayData = [];
         
+        // Khởi tạo activeDuckNames nếu chưa có
+        if (this.activeDuckNames.length === 0) {
+            if (this.duckNames.length > 0) {
+                // Có file CSV đã upload
+                this.activeDuckNames = [...this.duckNames];
+                
+                // Loại bỏ các vịt đã thắng
+                if (this.winners.length > 0) {
+                    const winnerNames = this.winners.map(w => w.name);
+                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                }
+            } else {
+                // Không có file, tạo tên mặc định
+                for (let i = 1; i <= this.duckCount; i++) {
+                    this.activeDuckNames.push(`Vit #${i}`);
+                }
+                
+                // Loại bỏ các vịt số đã thắng
+                if (this.winners.length > 0) {
+                    const winnerNames = this.winners.map(w => w.name);
+                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                }
+            }
+        }
+        
+        // Lấy danh sách vịt hiện tại
+        let currentDucks = [...this.activeDuckNames];
+        
+        // Cập nhật duckCount theo số vịt hiện tại
+        this.duckCount = currentDucks.length;
+        
         for (let i = 1; i <= this.duckCount; i++) {
-            const duckName = this.duckNames.length >= i ? this.duckNames[i - 1] : null;
+            const duckName = currentDucks[i - 1];
             const duck = new Duck(i, this.trackLength, duckName);
             duck.randomizeSpeed();
             this.ducks.push(duck);
@@ -409,14 +560,18 @@ class Game {
         document.getElementById('controlPanel').classList.remove('hidden');
         document.getElementById('raceTrack').classList.remove('hidden');
         document.getElementById('minimap').classList.remove('hidden');
-        document.getElementById('leaderboard').classList.remove('hidden');
-        document.getElementById('highlightsPanel').classList.remove('hidden');
+        // document.getElementById('highlightsPanel').classList.remove('hidden');
         document.getElementById('bigTimer').classList.remove('hidden');
 
         this.raceStarted = false;
         this.raceFinished = false;
         this.racePaused = false;
         this.replayMode = false;
+        
+        // Hide continue button
+        document.getElementById('continueBtn').classList.add('hidden');
+        document.getElementById('continueBankBtn').classList.add('hidden');
+        document.getElementById('pauseBtn').disabled = false;
         this.currentRaceNumber = this.stats.totalRaces + 1;
         
         document.getElementById('raceNumber').textContent = `#${this.currentRaceNumber}`;
@@ -593,17 +748,18 @@ class Game {
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
         document.getElementById('timeLeft').textContent = `${timeLeft.toFixed(1)}s`;
         
-        const minutes = Math.floor(timeLeft / 60);
-        const seconds = Math.floor(timeLeft % 60);
-        const milliseconds = Math.floor((timeLeft % 1) * 100);
+        // Big timer shows elapsed time (counting up)
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = Math.floor(elapsed % 60);
+        const milliseconds = Math.floor((elapsed % 1) * 100);
         document.getElementById('bigTimer').querySelector('.timer-display').textContent = 
             `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(2, '0')}`;
 
         // Check if duck's left edge passes finish line (minus small offset for visual accuracy)
-        const hasFinisher = this.ducks.some(duck => duck.position >= this.trackLength - 20);
+        const hasFinisher = this.ducks.some(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET);
         
         if (hasFinisher) {
-            const winner = this.ducks.find(duck => duck.position >= this.trackLength - 20);
+            const winner = this.ducks.find(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET);
             console.log('Winner detected:', winner.name, 'Position:', winner.position, 'TrackLength:', this.trackLength);
             this.endRace();
             return;
@@ -616,7 +772,7 @@ class Game {
 
         const oldRankings = [...this.rankings];
         this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
-        this.checkHighlights(oldRankings, this.rankings);
+        // this.checkHighlights(oldRankings, this.rankings);
         
         if (this.rankings.length > 0) {
             const leader = this.rankings[0];
@@ -723,44 +879,40 @@ class Game {
         }
     }
 
-    checkHighlights(oldRankings, newRankings) {
-        if (oldRankings.length === 0) return;
+    // checkHighlights(oldRankings, newRankings) {
+    //     if (oldRankings.length === 0) return;
 
-        for (let i = 0; i < Math.min(10, newRankings.length); i++) {
-            const duck = newRankings[i];
-            const oldRank = oldRankings.findIndex(d => d.id === duck.id);
+    //     for (let i = 0; i < Math.min(10, newRankings.length); i++) {
+    //         const duck = newRankings[i];
+    //         const oldRank = oldRankings.findIndex(d => d.id === duck.id);
             
-            if (oldRank > i && oldRank - i >= 3) {
-                this.addHighlight(`${duck.name} vuot len ${oldRank - i} bac! Hien tai: Hang ${i + 1}`);
-            }
-        }
-    }
+    //         if (oldRank > i && oldRank - i >= 3) {
+    //             this.addHighlight(`${duck.name} vuot len ${oldRank - i} bac! Hien tai: Hang ${i + 1}`);
+    //         }
+    //     }
+    // }
 
-    addHighlight(message) {
-        const time = ((Date.now() - this.startTime) / 1000).toFixed(1);
-        this.highlights.unshift({ time, message });
-        if (this.highlights.length > 10) this.highlights.pop();
+    // addHighlight(message) {
+    //     const time = ((Date.now() - this.startTime) / 1000).toFixed(1);
+    //     this.highlights.unshift({ time, message });
+    //     if (this.highlights.length > 10) this.highlights.pop();
         
-        const list = document.getElementById('highlightsList');
-        list.innerHTML = this.highlights.map(h => 
-            `<div class="highlight-item">[${h.time}s] ${h.message}</div>`
-        ).join('');
-    }
+    //     const list = document.getElementById('highlightsList');
+    //     list.innerHTML = this.highlights.map(h => 
+    //         `<div class="highlight-item">[${h.time}s] ${h.message}</div>`
+    //     ).join('');
+    // }
 
-    updateLeaderboard() {
-        if (!this._leaderboardUpdateCounter) this._leaderboardUpdateCounter = 0;
-        this._leaderboardUpdateCounter++;
-        if (this._leaderboardUpdateCounter % 10 !== 0) return;
-        
-        const list = document.getElementById('leaderboardList');
-        const top30 = this.rankings.slice(0, 30);
+    updateHistoryWin() {
+        // Cập nhật danh sách lịch sử chiến thắng
+        const list = document.getElementById('historyWinList');
+        if (!list || this.winners.length === 0) return;
         
         let html = '<ol>';
-        top30.forEach((duck, index) => {
-            const progress = ((duck.position / this.trackLength) * 100).toFixed(1);
+        this.winners.forEach((winner, index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
-            const colorDot = `<span style="display:inline-block;width:12px;height:12px;background:${duck.color};border-radius:50%;margin-right:5px;"></span>`;
-            html += `<li>${medal}${colorDot}${duck.name} - ${progress}%</li>`;
+            const colorDot = `<span style="display:inline-block;width:12px;height:12px;background:${winner.color};border-radius:50%;margin-right:5px;"></span>`;
+            html += `<li>${medal}${colorDot}${winner.name}</li>`;
         });
         html += '</ol>';
         
@@ -781,6 +933,12 @@ class Game {
         this.soundManager.playFinishSound();
         setTimeout(() => this.soundManager.playCrowdCheer(), 300);
         
+        // Show continue button in control panel
+        document.getElementById('continueBtn').classList.remove('hidden');
+        document.getElementById('continueBankBtn').classList.remove('hidden');
+        document.getElementById('pauseBtn').disabled = true;
+        document.getElementById('replayBtn').disabled = false;
+        
         // Show victory popup
         this.showVictoryPopup(winner);
 
@@ -789,7 +947,7 @@ class Game {
             this.stats.top3Finishes++;
         }
         this.saveStats();
-        this.updateStatsDisplay();
+        // this.updateStatsDisplay(); // Stats panel removed
 
         this.raceHistory.push({
             raceNumber: this.currentRaceNumber,
@@ -886,6 +1044,118 @@ class Game {
                 document.body.appendChild(popup);
             }
         }, 300);
+    }
+
+    continueRace() {
+        // Lưu vịt thắng vào danh sách winners
+        if (this.rankings.length > 0) {
+            const winner = this.rankings[0];
+            this.winners.push({
+                position: this.winners.length + 1,
+                id: winner.id,
+                name: winner.name,
+                color: winner.color,
+                raceNumber: this.currentRaceNumber
+            });
+            
+            // Xóa vịt thắng khỏi activeDuckNames
+            this.activeDuckNames = this.activeDuckNames.filter(name => name !== winner.name);
+            
+            // Lưu và cập nhật UI lịch sử chiến thắng
+            this.saveWinners();
+            this.updateHistoryWin();
+        }
+        
+        // Đóng victory popup
+        this.closeVictoryPopup();
+        
+        // Ẩn result panel
+        document.getElementById('resultPanel').classList.add('hidden');
+        
+        // Kiểm tra còn đủ vịt để đua không (tối thiểu 10)
+        if (this.activeDuckNames.length < 10) {
+            alert(`Chỉ còn ${this.activeDuckNames.length} vịt! Không đủ để tiếp tục (cần ít nhất 10 vịt).`);
+            this.showWinnersPanel();
+            return;
+        }
+        
+        // Reset và bắt đầu đua mới với số vịt còn lại
+        this.ducks = [];
+        this.duckElements.clear();
+        this.raceStarted = false;
+        this.raceFinished = false;
+        this.racePaused = false;
+        this.rankings = [];
+        // this.highlights = [];
+        this.replayData = [];
+        
+        // Ẩn vạch đích
+        document.getElementById('finishLine').classList.add('hidden');
+        
+        if (this.trackContainer) {
+            this.trackContainer.innerHTML = '';
+        }
+        
+        // Hiển thị số vịt còn lại
+        alert(`Tiếp tục với ${this.activeDuckNames.length} vịt còn lại!`);
+        
+        // Bắt đầu setup race mới
+        this.setupRace();
+    }
+
+    showWinnersPanel() {
+        const resultPanel = document.getElementById('resultPanel');
+        resultPanel.classList.remove('hidden');
+        
+        document.getElementById('resultTitle').innerHTML = '🏆 Kết Quả Các Giải';
+        
+        let html = '<div class="winners-list">';
+        html += '<h3>🎉 Danh Sách Giải Thưởng 🎉</h3>';
+        
+        if (this.winners.length > 0) {
+            html += '<div class="winners-grid">';
+            this.winners.forEach((winner, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
+                html += `
+                    <div class="winner-card">
+                        <div class="winner-medal">${medal}</div>
+                        <div class="winner-position">Giải ${winner.position}</div>
+                        <div class="winner-duck-name">${winner.name}</div>
+                        <div style="width:30px;height:30px;background:${winner.color};border-radius:50%;margin:10px auto;"></div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        } else {
+            html += '<p>Chưa có vịt nào thắng giải!</p>';
+        }
+        
+        html += '</div>';
+        html += '<div class="result-actions">';
+        html += '<button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>';
+        html += '<button class="btn btn-secondary" onclick="game.viewHistory()">📜 Xem Lịch Sử</button>';
+        html += '</div>';
+        
+        document.getElementById('resultMessage').innerHTML = html;
+    }
+
+    resetHistory() {
+        if (confirm('Bạn có chắc muốn xóa lịch sử chiến thắng và bắt đầu lại?')) {
+            this.winners = [];
+            this.activeDuckNames = [...this.duckNames];
+            this.saveWinners();
+            // Reload page để làm mới giao diện
+            location.reload();
+        }
+    }
+
+    fullReset() {
+        // Reset hoàn toàn bao gồm cả winners
+        this.winners = [];
+        this.excludedDucks = [];
+        this.activeDuckNames = [...this.duckNames]; // Reset về danh sách ban đầu
+        this.saveWinners();
+        this.reset();
     }
 
     toggleReplay() {
@@ -990,13 +1260,14 @@ class Game {
     }
 
     reset() {
+        // Reset nhưng giữ lại winners và excludedDucks nếu có
         this.ducks = [];
         this.duckElements.clear();
         this.raceStarted = false;
         this.raceFinished = false;
         this.racePaused = false;
         this.rankings = [];
-        this.highlights = [];
+        // this.highlights = [];
         this.replayMode = false;
         this.replayData = [];
         
@@ -1016,8 +1287,7 @@ class Game {
         document.getElementById('controlPanel').classList.add('hidden');
         document.getElementById('raceTrack').classList.add('hidden');
         document.getElementById('minimap').classList.add('hidden');
-        document.getElementById('leaderboard').classList.add('hidden');
-        document.getElementById('highlightsPanel').classList.add('hidden');
+        // document.getElementById('highlightsPanel').classList.add('hidden');
         document.getElementById('bigTimer').classList.add('hidden');
         document.getElementById('finishLine').classList.add('hidden');
 

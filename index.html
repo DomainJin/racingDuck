@@ -10,27 +10,7 @@
     <div class="container">
         <h1>🦆 GAME ĐUA VỊT 🦆</h1>
         
-        <!-- Big Timer Display -->
-        <div class="big-timer hidden" id="bigTimer">
-            <div class="timer-display">00:00:30</div>
-        </div>
-        
         <!-- Statistics Panel -->
-        <div class="stats-panel" id="statsPanel">
-            <div class="stat-item">
-                <span class="stat-label">Tổng số trận:</span>
-                <span class="stat-value" id="totalRaces">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Top 3 Finishes:</span>
-                <span class="stat-value" id="top3Count">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Win Rate:</span>
-                <span class="stat-value" id="winRate">0%</span>
-            </div>
-        </div>
-
         <!-- Cài đặt game -->
         <div class="settings-panel" id="settingsPanel">
             <h2>Cài Đặt Cuộc Đua</h2>
@@ -46,6 +26,14 @@
                 <label for="duckNamesFile">File danh sách (CSV/Excel):</label>
                 <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)">
                 <small style="color: #888;">Tải file CSV với cột STT và Họ tên</small>
+            </div>
+            <div class="input-group">
+                <label for="iconTheme">Chủ đề icon:</label>
+                <select id="iconTheme" onchange="game.changeIconTheme()">
+                    <option value="output_1">Chủ đề 1</option>
+                    <option value="output_2">Chủ đề 2</option>
+                </select>
+                <small style="color: #888;" id="iconCount">0 icon</small>
             </div>
             <div class="input-group">
                 <label for="soundToggle">
@@ -77,12 +65,17 @@
             <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Tạm dừng</button>
             <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Tiếp tục</button>
             <button class="btn btn-small" onclick="game.toggleReplay()" id="replayBtn" disabled>🔄 Replay</button>
+            <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBtn">🎯 Tiếp Tục Giải Tiếp Theo</button>
         </div>
 
         <!-- Main Content Area -->
         <div class="race-container">
             <!-- Hybrid Approach: DOM-based racing track -->
             <div class="race-track hidden" id="raceTrack">
+                <!-- Big Timer Display -->
+                <div class="big-timer hidden" id="bigTimer">
+                    <div class="timer-display">00:00:00</div>
+                </div>
                 <div class="bank-top" id="bankTop"></div>
                 <div class="race-river" id="raceRiver">
                     <div class="water-flow"></div>
@@ -96,7 +89,9 @@
                     </div>
                     <!-- Ducks will be added here dynamically -->
                 </div>
-                <div class="bank-bot" id="bankBot"></div>
+                <div class="bank-bot" id="bankBot">
+                    <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBankBtn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 1000;">🎯 Tiếp Tục Giải Tiếp Theo</button>
+                </div>
                 <div class="finish-line hidden" id="finishLine">FINISH</div>
             </div>
 
@@ -113,24 +108,25 @@
         </div>
 
         <!-- Bảng xếp hạng -->
-        <div class="leaderboard hidden" id="leaderboard">
-            <h3>🏆 Bảng Xếp Hạng Top 30</h3>
-            <div id="leaderboardList"></div>
+        <div class="history-win" id="historyWin">
+            <h3>🏆 Lịch Sử Chiến Thắng</h3>
+            <div id="historyWinList"></div>
+            <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Chơi Lại (Xóa Lịch Sử)</button>
         </div>
 
         <!-- Highlights Panel -->
-        <div class="highlights-panel hidden" id="highlightsPanel">
+        <!-- <div class="highlights-panel hidden" id="highlightsPanel">
             <h3>⚡ Highlights</h3>
             <div id="highlightsList"></div>
-        </div>
+        </div> -->
 
         <!-- Kết quả -->
         <div class="result-panel hidden" id="resultPanel">
             <h2 id="resultTitle">Kết Quả</h2>
             <div id="resultMessage"></div>
             <div class="result-actions">
-                <button class="btn btn-primary" onclick="game.reset()">Đua Lại</button>
-                <button class="btn btn-secondary" onclick="game.viewHistory()">Xem Lịch Sử</button>
+                <button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>
+                <button class="btn btn-secondary" onclick="game.viewHistory()">📜 Xem Lịch Sử</button>
             </div>
         </div>
 
@@ -155,7 +151,8 @@
                 <div class="winner-stats" id="winnerStats"></div>
             </div>
             <div class="victory-footer">
-                <button class="btn btn-primary" onclick="game.closeVictoryPopup()">Tiếp Tục</button>
+                <button class="btn btn-primary" onclick="game.continueRace()">🎯 Tiếp Tục (Giải Tiếp Theo)</button>
+                <button class="btn btn-secondary" onclick="game.showWinnersPanel(); game.closeVictoryPopup()">📋 Xem Kết Quả</button>
             </div>
         </div>
     </div>
