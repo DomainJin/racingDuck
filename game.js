@@ -218,7 +218,7 @@ class Game {
     constructor() {
         this.ducks = [];
         this.duckCount = 300;
-        this.raceDuration = 10;
+        this.raceDuration = 20;
         
         this.trackContainer = null;
         this.duckElements = new Map();
