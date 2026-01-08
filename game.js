@@ -1,6 +1,9 @@
 // Finish line offset - distance from duck nose to right edge of 150px icon
 const FINISH_LINE_OFFSET = 100;
 
+// Minimum participants required to start/continue a race
+const MINIMUM_PARTICIPANTS = 5;
+
 // Sound system
 class SoundManager {
     constructor() {
@@ -178,7 +181,7 @@ class Duck {
                 }
             }
             
-            this.acceleration = (this.targetSpeed - this.speed) * 0.12;
+            this.acceleration = (this.targetSpeed - this.speed) * 0.05;
             this.speed += this.acceleration;
             this.speed = Math.max(this.minSpeed, Math.min(this.maxSpeed * 1.7, this.speed));
             
@@ -478,8 +481,8 @@ class Game {
         this.raceDuration = parseInt(document.getElementById('raceDuration').value) || 10;
         this.soundManager.setEnabled(document.getElementById('soundToggle').checked);
 
-        if (this.duckCount < 10 || this.duckCount > 1000) {
-            alert('So luong vit phai tu 10 den 1000!');
+        if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 1000) {
+            alert(`So luong vit phai tu ${MINIMUM_PARTICIPANTS} den 1000!`);
             return;
         }
 
@@ -800,7 +803,7 @@ class Game {
                 // Camera follows leader normally (60% from left edge)
                 targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
                 cameraMaxOffset = this.trackLength - this.viewportWidth;
-                cameraSpeed = 0.2;
+                cameraSpeed = 0.1;
             }
             
             this.cameraOffset += (targetCameraOffset - this.cameraOffset) * cameraSpeed;
@@ -815,7 +818,7 @@ class Game {
         }
 
         // Update background offset continuously
-        this.backgroundOffset += 3.5; // Constant scroll speed
+        this.backgroundOffset += 8; // Constant scroll speed
         
         this.updateDuckPositions();
         this.updateBackgrounds();
@@ -1072,9 +1075,9 @@ class Game {
         // Ẩn result panel
         document.getElementById('resultPanel').classList.add('hidden');
         
-        // Kiểm tra còn đủ vịt để đua không (tối thiểu 10)
-        if (this.activeDuckNames.length < 10) {
-            alert(`Chỉ còn ${this.activeDuckNames.length} vịt! Không đủ để tiếp tục (cần ít nhất 10 vịt).`);
+        // Kiểm tra còn đủ vịt để đua không
+        if (this.activeDuckNames.length < MINIMUM_PARTICIPANTS) {
+            alert(`Chỉ còn ${this.activeDuckNames.length} vịt! Không đủ để tiếp tục (cần ít nhất ${MINIMUM_PARTICIPANTS} vịt).`);
             this.showWinnersPanel();
             return;
         }
