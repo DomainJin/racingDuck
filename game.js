@@ -94,6 +94,9 @@ class Duck {
         this.laneOffset = 0;
         this.targetLaneOffset = 0;
         this.laneChangeTimer = 0;
+        this.currentFrame = 0;
+        this.frameTimer = 0;
+        this.animationSpeed = 5; // Số frame chờ giữa mỗi ảnh (càng thấp càng nhanh)
     }
 
     generateColor() {
@@ -123,6 +126,15 @@ class Duck {
             
             // Smooth lane transition
             this.laneOffset += (this.targetLaneOffset - this.laneOffset) * 0.05;
+            
+            // Animation frame update
+            this.frameTimer++;
+            const speedFactor = this.speed / this.baseSpeed; // 1.0 = normal, >1 = faster
+            const adjustedAnimSpeed = Math.max(2, this.animationSpeed / speedFactor); // Faster duck = faster animation
+            if (this.frameTimer >= adjustedAnimSpeed) {
+                this.frameTimer = 0;
+                this.currentFrame = (this.currentFrame + 1) % 3; // Cycle through 0, 1, 2
+            }
             
             // Speed change with rubber banding
             this.speedChangeTimer--;
@@ -260,10 +272,13 @@ class Game {
         this.replayData = [];
         this.replayFrame = 0;
         
-        this.duckImages = [];
-        this.iconCount = 0; // Sẽ được tự động phát hiện
+        this.winnerAnimationFrame = 0;
+        this.winnerAnimationInterval = null;
+        
+        this.duckImages = []; // Mỗi phần tử sẽ là array 3 ảnh [frame1, frame2, frame3]
+        this.iconCount = 44; // output_3 có 44 folders
         this.imagesLoaded = false;
-        this.currentTheme = 'output_1'; // Theme mặc định
+        this.currentTheme = 'output_3'; // Sử dụng output_3
         
         // this.updateStatsDisplay(); // Stats panel removed
         this.updateHistoryWin(); // Load history from localStorage
@@ -359,44 +374,51 @@ class Game {
     }
 
     detectAndLoadDuckImages() {
-        // Tự động phát hiện số lượng icon trong thư mục hiện tại
-        let currentIndex = 1;
-        let consecutiveFails = 0;
-        const maxConsecutiveFails = 3; // Dừng sau 3 file liên tiếp không tồn tại
+        // Load 3 frames từ mỗi folder trong output_3
+        let loadedFolders = 0;
+        const totalFolders = this.iconCount;
         
-        const tryLoadImage = (index) => {
-            const img = new Image();
-            const paddedNum = String(index).padStart(2, '0');
-            img.src = `${this.currentTheme}/Input_Icon_${paddedNum}.png`;
+        for (let folderNum = 1; folderNum <= totalFolders; folderNum++) {
+            const frames = [];
+            let loadedFrames = 0;
             
-            img.onload = () => {
-                this.duckImages.push(img);
-                this.iconCount = this.duckImages.length;
-                consecutiveFails = 0;
+            // Load 3 frames cho mỗi folder
+            for (let frameNum = 1; frameNum <= 3; frameNum++) {
+                const img = new Image();
+                img.src = `${this.currentTheme}/${folderNum}/final_${folderNum}_${frameNum}.png`;
                 
-                // Cập nhật UI
-                document.getElementById('iconCount').textContent = `${this.iconCount} icon`;
+                img.onload = () => {
+                    loadedFrames++;
+                    if (loadedFrames === 3) {
+                        loadedFolders++;
+                        if (loadedFolders === totalFolders) {
+                            this.imagesLoaded = true;
+                            console.log(`Loaded ${totalFolders} duck animations (3 frames each) from ${this.currentTheme}!`);
+                            document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                        }
+                    }
+                };
                 
-                // Thử load file tiếp theo
-                tryLoadImage(index + 1);
-            };
+                img.onerror = () => {
+                    console.warn(`Failed to load: ${img.src}`);
+                    loadedFrames++;
+                    if (loadedFrames === 3) {
+                        loadedFolders++;
+                        if (loadedFolders === totalFolders) {
+                            this.imagesLoaded = true;
+                            document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                        }
+                    }
+                };
+                
+                frames.push(img);
+            }
             
-            img.onerror = () => {
-                consecutiveFails++;
-                
-                if (consecutiveFails >= maxConsecutiveFails) {
-                    // Đã thử đủ, dừng lại
-                    this.imagesLoaded = true;
-                    console.log(`Detected and loaded ${this.iconCount} duck icons from ${this.currentTheme}!`);
-                    document.getElementById('iconCount').textContent = `${this.iconCount} icon`;
-                } else {
-                    // Thử file tiếp theo
-                    tryLoadImage(index + 1);
-                }
-            };
-        };
+            this.duckImages.push(frames);
+        }
         
-        tryLoadImage(currentIndex);
+        // Cập nhật UI ngay lập tức
+        document.getElementById('iconCount').textContent = `Loading ${totalFolders} animated ducks...`;
     }
 
     preloadDuckImages() {
@@ -496,7 +518,9 @@ class Game {
         this.trackHeight = this.trackContainer.clientHeight || 470;
         
         const fps = 60;
-        const maxDuckSpeed = 4.0;
+        // Giảm target pixel để đua đúng thời gian (không chỉnh animation speed)
+        // Với rubber-banding và biến động tốc độ, vịt chạy chậm hơn nhiều so với max
+        const maxDuckSpeed = 1.8; // Giảm xuống để trackLength ngắn hơn, đua đúng thời gian
         this.trackLength = maxDuckSpeed * fps * this.raceDuration;
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
@@ -642,7 +666,8 @@ class Game {
         if (this.imagesLoaded && this.duckImages.length > 0) {
             const iconIndex = (duck.id - 1) % this.duckImages.length;
             const img = document.createElement('img');
-            img.src = this.duckImages[iconIndex].src;
+            // Sử dụng frame đầu tiên (index 0)
+            img.src = this.duckImages[iconIndex][0].src;
             img.className = 'duck-icon';
             img.alt = duck.name;
             img.style.width = '150px';
@@ -836,6 +861,15 @@ class Game {
                 const wobble = duck.getWobble(Date.now());
                 const laneShift = duck.laneOffset || 0;
                 duckEl.style.transform = `translateY(${wobble + laneShift}px)`;
+                
+                // Cập nhật animation frame
+                if (this.imagesLoaded && this.duckImages.length > 0) {
+                    const iconIndex = (duck.id - 1) % this.duckImages.length;
+                    const imgEl = duckEl.querySelector('.duck-icon');
+                    if (imgEl && this.duckImages[iconIndex] && this.duckImages[iconIndex][duck.currentFrame]) {
+                        imgEl.src = this.duckImages[iconIndex][duck.currentFrame].src;
+                    }
+                }
             }
         });
     }
@@ -1007,10 +1041,29 @@ class Game {
             fullscreenElement.appendChild(popup);
         }
         
-        // Set winner icon
+        // Set winner icon với animation
         if (this.imagesLoaded && this.duckImages.length > 0) {
             const iconIndex = (winner.id - 1) % this.duckImages.length;
-            winnerIconEl.innerHTML = `<img src="${this.duckImages[iconIndex].src}" alt="${winner.name}">`;
+            // Tạo img element với frame đầu tiên
+            const imgEl = document.createElement('img');
+            imgEl.src = this.duckImages[iconIndex][0].src;
+            imgEl.alt = winner.name;
+            imgEl.id = 'winnerAnimatedIcon';
+            winnerIconEl.innerHTML = '';
+            winnerIconEl.appendChild(imgEl);
+            
+            // Bắt đầu animation cho winner icon (nhanh hơn - mỗi 100ms)
+            this.winnerAnimationFrame = 0;
+            if (this.winnerAnimationInterval) {
+                clearInterval(this.winnerAnimationInterval);
+            }
+            this.winnerAnimationInterval = setInterval(() => {
+                this.winnerAnimationFrame = (this.winnerAnimationFrame + 1) % 3;
+                const animImgEl = document.getElementById('winnerAnimatedIcon');
+                if (animImgEl && this.duckImages[iconIndex] && this.duckImages[iconIndex][this.winnerAnimationFrame]) {
+                    animImgEl.src = this.duckImages[iconIndex][this.winnerAnimationFrame].src;
+                }
+            }, 100); // 100ms = animation nhanh cho winner
         } else {
             winnerIconEl.innerHTML = `<div style="width:200px;height:200px;border-radius:50%;background:${winner.color};margin:0 auto;"></div>`;
         }
@@ -1039,6 +1092,13 @@ class Game {
     closeVictoryPopup() {
         const popup = document.getElementById('victoryPopup');
         popup.classList.remove('show');
+        
+        // Dừng winner animation
+        if (this.winnerAnimationInterval) {
+            clearInterval(this.winnerAnimationInterval);
+            this.winnerAnimationInterval = null;
+        }
+        
         setTimeout(() => {
             popup.classList.add('hidden');
             popup.style.display = 'none';

@@ -4,11 +4,18 @@
     box-sizing: border-box;
 }
 
+:root {
+    --background-speed: 1;
+    --gradient-duration: calc(15s / var(--background-speed));
+    --parallax-slow-duration: calc(60s / var(--background-speed));
+    --parallax-medium-duration: calc(50s / var(--background-speed));
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
     background-size: 200% 200%;
-    animation: gradientShift 15s ease infinite;
+    animation: gradientShift var(--gradient-duration) ease infinite;
     min-height: 100vh;
     padding: 20px;
     color: #333;
@@ -309,7 +316,7 @@ h1 {
     background-image: url('static/river_bank_top.png');
     background-repeat: repeat-x;
     background-size: auto 80px;
-    animation: parallaxSlow 60s linear infinite;
+    animation: parallaxSlow var(--parallax-slow-duration) linear infinite;
     z-index: 1;
 }
 
@@ -332,7 +339,7 @@ h1 {
     background-image: url('static/river_bank_bottom.png');
     background-repeat: repeat-x;
     background-size: auto 50px;
-    animation: parallaxMedium 50s linear infinite;
+    animation: parallaxMedium var(--parallax-medium-duration) linear infinite;
     z-index: 1;
 }
 
