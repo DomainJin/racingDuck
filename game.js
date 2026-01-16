@@ -71,7 +71,7 @@ class SoundManager {
 class Duck {
     constructor(id, trackLength, name = null) {
         this.id = id;
-        this.name = name || `Vit #${id}`;
+        this.name = name || `Racer #${id}`;
         this.position = 0;
         this.speed = 0;
         this.baseSpeed = Math.random() * 0.8 + 3.2;
@@ -95,8 +95,8 @@ class Duck {
         this.targetLaneOffset = 0;
         this.laneChangeTimer = 0;
         this.currentFrame = 0;
-        this.frameTimer = 0;
-        this.animationSpeed = 1; // Số frame chờ giữa mỗi ảnh (càng thấp càng nhanh)
+        this.lastFrameTime = 0;
+        this.targetFPS = 60; // FPS cho animation webp
     }
 
     generateColor() {
@@ -127,12 +127,11 @@ class Duck {
             // Smooth lane transition
             this.laneOffset += (this.targetLaneOffset - this.laneOffset) * 0.05;
             
-            // Animation frame update
-            this.frameTimer++;
-            const speedFactor = this.speed / this.baseSpeed; // 1.0 = normal, >1 = faster
-            const adjustedAnimSpeed = Math.max(2, this.animationSpeed / speedFactor); // Faster duck = faster animation
-            if (this.frameTimer >= adjustedAnimSpeed) {
-                this.frameTimer = 0;
+            // Animation frame update với FPS cố định 12
+            const currentTime = Date.now();
+            const frameInterval = 1000 / this.targetFPS; // ~83ms cho 12 FPS
+            if (currentTime - this.lastFrameTime >= frameInterval) {
+                this.lastFrameTime = currentTime;
                 this.currentFrame = (this.currentFrame + 1) % 3; // Cycle through 0, 1, 2
             }
             
@@ -240,7 +239,6 @@ class Game {
         
         this.trackContainer = null;
         this.duckElements = new Map();
-        this.minimapContainer = null;
         
         this.trackLength = 0;
         this.raceStarted = false;
@@ -267,10 +265,6 @@ class Game {
         this.activeDuckNames = []; // Danh sách vịt đang tham gia (sẽ giảm dần)
         this.winners = this.loadWinners(); // Danh sách các vịt đã thắng
         this.excludedDucks = []; // Danh sách các vịt bị loại
-        
-        this.replayMode = false;
-        this.replayData = [];
-        this.replayFrame = 0;
         
         this.winnerAnimationFrame = 0;
         this.winnerAnimationInterval = null;
@@ -339,7 +333,7 @@ class Game {
         const checkTheme = (index) => {
             const testImg = new Image();
             const themeName = `output_${index}`;
-            testImg.src = `${themeName}/Input_Icon_01.png`;
+            testImg.src = `${themeName}/Input_Icon_01.webp`;
             
             testImg.onload = () => {
                 // Thư mục tồn tại, thêm vào dropdown
@@ -374,7 +368,64 @@ class Game {
     }
 
     detectAndLoadDuckImages() {
-        // Load 3 frames từ mỗi folder trong output_3
+        // Tự động detect số folder có sẵn trong theme
+        console.log(`Starting icon detection for theme: ${this.currentTheme}`);
+        document.getElementById('iconCount').textContent = 'Detecting icons...';
+        
+        const maxFolders = 50; // Kiểm tra tối đa 50 folders
+        let detectedCount = 0;
+        let consecutiveFails = 0;
+        const maxFails = 3;
+        
+        const checkFolder = (folderNum) => {
+            const testImg = new Image();
+            const testPath = `${this.currentTheme}/${folderNum}/compressed_final_${folderNum}_1.webp`;
+            testImg.src = testPath;
+            
+            testImg.onload = () => {
+                console.log(`✓ Found folder ${folderNum}`);
+                detectedCount++;
+                consecutiveFails = 0;
+                
+                if (folderNum < maxFolders) {
+                    checkFolder(folderNum + 1);
+                } else {
+                    this.iconCount = detectedCount;
+                    console.log(`Detection complete: ${detectedCount} folders found`);
+                    document.getElementById('iconCount').textContent = `${detectedCount} icons detected`;
+                    this.loadAllDuckImages();
+                }
+            };
+            
+            testImg.onerror = () => {
+                console.log(`✗ Folder ${folderNum} not found (path: ${testPath})`);
+                consecutiveFails++;
+                if (consecutiveFails < maxFails && folderNum < maxFolders) {
+                    checkFolder(folderNum + 1);
+                } else {
+                    // Kết thúc detection
+                    this.iconCount = detectedCount;
+                    console.log(`Detection stopped at folder ${folderNum}. Total found: ${detectedCount}`);
+                    document.getElementById('iconCount').textContent = `${detectedCount} icons detected`;
+                    if (detectedCount > 0) {
+                        this.loadAllDuckImages();
+                    } else {
+                        console.error('No icons found! Check if files exist in:', this.currentTheme);
+                    }
+                }
+            };
+        };
+        
+        checkFolder(1);
+    }
+    
+    loadAllDuckImages() {
+        if (this.iconCount === 0) {
+            console.warn('No icons detected!');
+            return;
+        }
+        
+        // Load 3 frames từ mỗi folder
         let loadedFolders = 0;
         const totalFolders = this.iconCount;
         
@@ -385,7 +436,7 @@ class Game {
             // Load 3 frames cho mỗi folder
             for (let frameNum = 1; frameNum <= 3; frameNum++) {
                 const img = new Image();
-                img.src = `${this.currentTheme}/${folderNum}/final_${folderNum}_${frameNum}.png`;
+                img.src = `${this.currentTheme}/${folderNum}/compressed_final_${folderNum}_${frameNum}.webp`;
                 
                 img.onload = () => {
                     loadedFrames++;
@@ -428,7 +479,7 @@ class Game {
         for (let i = 1; i <= totalImages; i++) {
             const img = new Image();
             const paddedNum = String(i).padStart(2, '0');
-            img.src = `output/Input_Icon_${paddedNum}.png`;
+            img.src = `output/Input_Icon_${paddedNum}.webp`;
             
             img.onload = () => {
                 loadedCount++;
@@ -556,7 +607,6 @@ class Game {
         }
 
         this.trackContainer = document.getElementById('raceRiver');
-        this.minimapContainer = document.getElementById('minimapDucks');
         
         // Calculate viewport width dynamically based on track container
         const trackElement = document.getElementById('raceTrack');
@@ -564,11 +614,15 @@ class Game {
         // Use raceRiver height (excludes bank_top and bank_bot)
         this.trackHeight = this.trackContainer.clientHeight || 470;
         
-        const fps = 60;
-        // Tăng maxDuckSpeed để bù cho rubber-banding và biến động tốc độ
-        // Với turbo và biến động, vịt có thể chạy nhanh hơn baseSpeed
-        const maxDuckSpeed = 7.0; // Tăng từ 4.0 lên 7.0 để đua đúng thời gian
-        this.trackLength = maxDuckSpeed * fps * this.raceDuration;
+        // Tính trackLength dựa trên tốc độ thực tế với rubber-banding
+        // Quan sát: race càng dài, tốc độ trung bình càng cao do nhiều vịt luân phiên dẫn đầu
+        // 30s: thiếu 33% | 60s: thiếu 17% | 120s: thiếu 25% | 180s: thiếu 22%
+        // baseSpeed: 3.6 px/frame @ 60 FPS, nhưng rubber-banding giảm hiệu quả
+        const basePxPerSec = 70; // Giảm base vì tốc độ thực tế cao hơn dự kiến
+        // Tăng factor mạnh hơn cho race dài: +50% cho 60s, +80% cho 120s, +100% cho 180s
+        const durationFactor = Math.min(2.0, 1 + (this.raceDuration / 90)); 
+        const pixelsPerSecond = basePxPerSec * durationFactor;
+        this.trackLength = this.raceDuration * pixelsPerSecond;
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
         
@@ -587,7 +641,6 @@ class Game {
 
         this.ducks = [];
         // this.highlights = [];
-        this.replayData = [];
         
         // Khởi tạo activeDuckNames nếu chưa có
         if (this.activeDuckNames.length === 0) {
@@ -603,7 +656,7 @@ class Game {
             } else {
                 // Không có file, tạo tên mặc định
                 for (let i = 1; i <= this.duckCount; i++) {
-                    this.activeDuckNames.push(`Vit #${i}`);
+                    this.activeDuckNames.push(`Racer #${i}`);
                 }
                 
                 // Loại bỏ các vịt số đã thắng
@@ -633,14 +686,12 @@ class Game {
         document.getElementById('raceInfo').classList.remove('hidden');
         document.getElementById('controlPanel').classList.remove('hidden');
         document.getElementById('raceTrack').classList.remove('hidden');
-        document.getElementById('minimap').classList.remove('hidden');
         // document.getElementById('highlightsPanel').classList.remove('hidden');
         document.getElementById('bigTimer').classList.remove('hidden');
 
         this.raceStarted = false;
         this.raceFinished = false;
         this.racePaused = false;
-        this.replayMode = false;
         
         // Hide continue button
         document.getElementById('continueBtn').classList.add('hidden');
@@ -652,7 +703,6 @@ class Game {
         document.getElementById('raceStatus').textContent = 'Cho bat dau...';
         document.getElementById('timeLeft').textContent = `${this.raceDuration}s`;
         document.getElementById('pauseBtn').disabled = true;
-        document.getElementById('replayBtn').disabled = true;
         document.getElementById('fullscreenBtn').textContent = '🚀 Bắt Đầu';
 
         this.soundManager.init();
@@ -689,6 +739,10 @@ class Game {
         
         this.raceStarted = true;
         this.startTime = Date.now();
+        console.log('=== RACE START ===');
+        console.log('Thời gian bắt đầu:', new Date(this.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
+        console.log('Target pixel (đích):', this.trackLength);
+        console.log('==================');
         document.getElementById('raceStatus').textContent = 'Dang dua!';
         document.getElementById('pauseBtn').disabled = false;
         document.getElementById('fullscreenBtn').textContent = '🔲 Fullscreen';
@@ -853,6 +907,9 @@ class Game {
             const leader = this.rankings[0];
             const distanceToFinish = this.trackLength - leader.position;
             
+            // Log thông tin vịt dẫn đầu real-time
+            console.log(`[Leader] ${leader.name} | Position: ${leader.position.toFixed(2)}px | Còn lại: ${distanceToFinish.toFixed(2)}px | Thời gian: ${elapsed.toFixed(2)}s`);
+            
             let targetCameraOffset;
             let cameraMaxOffset;
             let cameraSpeed;
@@ -882,19 +939,11 @@ class Game {
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
         }
 
-        if (this.replayData.length < 10000) {
-            this.replayData.push({
-                time: elapsed,
-                positions: this.ducks.map(d => ({ id: d.id, pos: d.position, finished: d.finished }))
-            });
-        }
-
         // Update background offset continuously
         this.backgroundOffset += 15; // Constant scroll speed
         
         this.updateDuckPositions();
         this.updateBackgrounds();
-        this.updateMinimap();
         this.updateLeaderboard();
     }
 
@@ -1021,7 +1070,6 @@ class Game {
         document.getElementById('continueBtn').classList.remove('hidden');
         document.getElementById('continueBankBtn').classList.remove('hidden');
         document.getElementById('pauseBtn').disabled = true;
-        document.getElementById('replayBtn').disabled = false;
         
         // Show victory popup
         this.showVictoryPopup(winner);
@@ -1044,7 +1092,6 @@ class Game {
         document.getElementById('raceStatus').textContent = 'Ket thuc!';
         document.getElementById('timeLeft').textContent = '0s';
         document.getElementById('pauseBtn').disabled = true;
-        document.getElementById('replayBtn').disabled = false;
         
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
@@ -1197,7 +1244,6 @@ class Game {
         this.racePaused = false;
         this.rankings = [];
         // this.highlights = [];
-        this.replayData = [];
         
         // Ẩn vạch đích
         document.getElementById('finishLine').classList.add('hidden');
@@ -1273,51 +1319,7 @@ class Game {
         this.reset();
     }
 
-    toggleReplay() {
-        if (this.replayData.length === 0) return;
-        
-        this.replayMode = !this.replayMode;
-        
-        if (this.replayMode) {
-            this.replayFrame = 0;
-            document.getElementById('replayBtn').textContent = '⏹ Dung Replay';
-            this.playReplay();
-        } else {
-            document.getElementById('replayBtn').textContent = '🔄 Replay';
-            if (this.animationId) {
-                cancelAnimationFrame(this.animationId);
-            }
-        }
-    }
 
-    playReplay() {
-        if (!this.replayMode || this.replayFrame >= this.replayData.length) {
-            this.replayMode = false;
-            document.getElementById('replayBtn').textContent = '🔄 Replay';
-            return;
-        }
-
-        const frame = this.replayData[this.replayFrame];
-        
-        frame.positions.forEach(p => {
-            const duck = this.ducks.find(d => d.id === p.id);
-            if (duck) {
-                duck.position = p.pos;
-                duck.finished = p.finished;
-            }
-        });
-
-        this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
-
-        this.updateDuckPositions();
-        this.updateMinimap();
-        this.updateLeaderboard();
-        
-        document.getElementById('timeLeft').textContent = `Replay: ${frame.time.toFixed(1)}s`;
-
-        this.replayFrame++;
-        this.animationId = requestAnimationFrame(() => this.playReplay());
-    }
 
     viewHistory() {
         if (this.raceHistory.length === 0) {
@@ -1333,7 +1335,7 @@ class Game {
         this.raceHistory.slice().reverse().forEach(race => {
             html += `<tr>
                 <td>#${race.raceNumber}</td>
-                <td>Vit #${race.winner}</td>
+                <td>Racer #${race.winner}</td>
                 <td>${race.duckCount}</td>
                 <td>${race.duration}s</td>
                 <td>${race.timestamp}</td>
@@ -1383,8 +1385,6 @@ class Game {
         this.racePaused = false;
         this.rankings = [];
         // this.highlights = [];
-        this.replayMode = false;
-        this.replayData = [];
         
         // Remove resize handler
         if (this.resizeHandler) {

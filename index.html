@@ -3,70 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Đua Vịt 🦆</title>
+    <title> The Lucky Raccer </title>
     <link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
     <div class="container">
-        <h1>🦆 GAME ĐUA VỊT 🦆</h1>
+        <h1> The Lucky Raccer </h1>
         
         <!-- Statistics Panel -->
         <!-- Cài đặt game -->
         <div class="settings-panel" id="settingsPanel">
-            <h2>Cài Đặt Cuộc Đua</h2>
+            <h2>Race Settings</h2>
             <div class="input-group">
-                <label for="duckCount">Số lượng vịt:</label>
+                <label for="duckCount">Number of Racers:</label>
                 <input type="number" id="duckCount" min="10" max="1000" value="300">
             </div>
             <div class="input-group">
-                <label for="raceDuration">Thời gian đua (giây):</label>
+                <label for="raceDuration">Race Duration (seconds):</label>
                 <input type="number" id="raceDuration" min="5" max="300" value="30">
             </div>
             <div class="input-group">
-                <label for="duckNamesFile">File danh sách (CSV/Excel):</label>
+                <label for="duckNamesFile">Racer List File (CSV/Excel):</label>
                 <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)">
-                <small style="color: #888;">Tải file CSV với cột STT và Họ tên</small>
+                <small style="color: #888;">Upload CSV file with columns: No. and Name</small>
             </div>
             <div class="input-group">
-                <label for="iconTheme">Chủ đề icon:</label>
+                <label for="iconTheme">Icon Theme:</label>
                 <select id="iconTheme" onchange="game.changeIconTheme()">
-                    <option value="output_1">Chủ đề 1</option>
-                    <option value="output_2">Chủ đề 2</option>
+                    <option value="output_1">Theme 1</option>
+                    <option value="output_2">Theme 2</option>
                 </select>
                 <small style="color: #888;" id="iconCount">0 icon</small>
             </div>
             <div class="input-group">
                 <label for="soundToggle">
-                    <input type="checkbox" id="soundToggle" checked> Bật âm thanh
+                    <input type="checkbox" id="soundToggle" checked> Enable Sound
                 </label>
             </div>
-            <button class="btn btn-primary" onclick="game.startRace()">Bắt Đầu Đua</button>
+            <button class="btn btn-primary" onclick="game.startRace()">Start Race</button>
         </div>
 
         <!-- Thông tin đua -->
         <div class="race-info hidden" id="raceInfo">
             <div class="info-item">
-                <span class="label">Trận đua:</span>
+                <span class="label">Race:</span>
                 <span id="raceNumber" class="value">#1</span>
             </div>
             <div class="info-item">
-                <span class="label">Thời gian còn lại:</span>
+                <span class="label">Time Left:</span>
                 <span id="timeLeft" class="value">30s</span>
             </div>
             <div class="info-item">
-                <span class="label">Trạng thái:</span>
-                <span id="raceStatus" class="value">Chờ bắt đầu</span>
+                <span class="label">Status:</span>
+                <span id="raceStatus" class="value">Waiting</span>
             </div>
         </div>
 
         <!-- Control Panel -->
         <div class="control-panel hidden" id="controlPanel">
             <button class="btn btn-small" onclick="game.toggleFullscreen()" id="fullscreenBtn">🔲 Fullscreen</button>
-            <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Tạm dừng</button>
-            <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Tiếp tục</button>
-            <button class="btn btn-small" onclick="game.toggleReplay()" id="replayBtn" disabled>🔄 Replay</button>
-            <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBtn">🎯 Tiếp Tục Giải Tiếp Theo</button>
-            <button class="btn btn-secondary" onclick="game.showWinnersPanel()" id="viewResultsBtn">📋 Xem Kết Quả</button>
+            <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Pause</button>
+            <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Resume</button>
+            <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBtn">🎯 Continue Next Race</button>
+            <button class="btn btn-secondary" onclick="game.showWinnersPanel()" id="viewResultsBtn">📋 View Results</button>
         </div>
 
         <!-- Main Content Area -->
@@ -91,28 +90,19 @@
                     <!-- Ducks will be added here dynamically -->
                 </div>
                 <div class="bank-bot" id="bankBot">
-                    <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBankBtn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 1000;">🎯 Tiếp Tục Giải Tiếp Theo</button>
+                    <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBankBtn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 1000;">🎯 Continue Next Race</button>
                 </div>
                 <div class="finish-line hidden" id="finishLine">FINISH</div>
             </div>
 
-            <!-- Mini Map -->
-            <div class="minimap hidden" id="minimap">
-                <h4>📍 Mini Map</h4>
-                <div class="minimap-track" id="minimapTrack">
-                    <div class="minimap-start"></div>
-                    <div class="minimap-finish"></div>
-                    <div class="minimap-ducks" id="minimapDucks"></div>
-                    <div class="minimap-viewport" id="minimapViewport"></div>
-                </div>
-            </div>
+
         </div>
 
         <!-- Bảng xếp hạng -->
         <div class="history-win" id="historyWin">
-            <h3>🏆 Lịch Sử Chiến Thắng</h3>
+            <h3>🏆 Victory History</h3>
             <div id="historyWinList"></div>
-            <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Chơi Lại (Xóa Lịch Sử)</button>
+            <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Restart (Clear History)</button>
         </div>
 
         <!-- Highlights Panel -->
@@ -123,7 +113,7 @@
 
         <!-- Kết quả -->
         <div class="result-panel hidden" id="resultPanel">
-            <h2 id="resultTitle">Kết Quả</h2>
+            <h2 id="resultTitle">Results</h2>
             <div id="resultMessage"></div>
             <!-- <div class="result-actions">
                 <button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>
@@ -133,9 +123,9 @@
 
         <!-- Race History -->
         <div class="history-panel hidden" id="historyPanel">
-            <h2>📊 Lịch Sử Các Trận Đua</h2>
+            <h2>📊 Race History</h2>
             <div id="historyList"></div>
-            <button class="btn btn-primary" onclick="game.closeHistory()">Đóng</button>
+            <button class="btn btn-primary" onclick="game.closeHistory()">Close</button>
         </div>
     </div>
 
@@ -144,7 +134,7 @@
         <div class="victory-overlay" onclick="game.closeVictoryPopup()"></div>
         <div class="victory-content">
             <div class="victory-header">
-                <h1>🎉 CHIẾN THẮNG! 🎉</h1>
+                <h1>🎉 VICTORY! 🎉</h1>
             </div>
             <div class="victory-body">
                 <div class="winner-icon" id="winnerIcon"></div>
@@ -152,8 +142,8 @@
                 <div class="winner-stats" id="winnerStats"></div>
             </div>
             <div class="victory-footer">
-                <button class="btn btn-primary" onclick="game.continueRace()">🎯 Tiếp Tục (Giải Tiếp Theo)</button>
-                <button class="btn btn-secondary" onclick="game.closeVictoryPopup(); game.showWinnersPanel()">📋 Xem Kết Quả</button>
+                <button class="btn btn-primary" onclick="game.continueRace()">🎯 Continue (Next Race)</button>
+                <button class="btn btn-secondary" onclick="game.closeVictoryPopup(); game.showWinnersPanel()">📋 View Results</button>
             </div>
         </div>
     </div>
