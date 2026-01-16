@@ -96,7 +96,7 @@ class Duck {
         this.laneChangeTimer = 0;
         this.currentFrame = 0;
         this.frameTimer = 0;
-        this.animationSpeed = 5; // Số frame chờ giữa mỗi ảnh (càng thấp càng nhanh)
+        this.animationSpeed = 1; // Số frame chờ giữa mỗi ảnh (càng thấp càng nhanh)
     }
 
     generateColor() {
@@ -454,44 +454,91 @@ class Game {
         const file = event.target.files[0];
         if (!file) return;
         
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target.result;
-            const lines = text.split('\n');
-            
-            this.duckNames = [];
-            
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line) continue;
+        const fileExt = file.name.split('.').pop().toLowerCase();
+        
+        if (fileExt === 'xlsx' || fileExt === 'xls') {
+            // Đọc file Excel
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    
+                    this.duckNames = [];
+                    
+                    // Bỏ qua header (dòng 0), đọc từ dòng 1
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        if (row && row.length >= 2 && row[1]) {
+                            const name = String(row[1]).trim();
+                            if (name) {
+                                this.duckNames.push(name);
+                            }
+                        }
+                    }
+                    
+                    if (this.duckNames.length > 0) {
+                        this.activeDuckNames = [...this.duckNames];
+                        
+                        if (this.winners.length > 0) {
+                            const winnerNames = this.winners.map(w => w.name);
+                            this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                        }
+                        
+                        document.getElementById('duckCount').value = this.duckNames.length;
+                        alert(`Đã tải ${this.duckNames.length} tên từ file Excel!`);
+                    } else {
+                        alert('Không đọc được tên từ file Excel.');
+                    }
+                } catch (error) {
+                    console.error('Error reading Excel:', error);
+                    alert('Lỗi khi đọc file Excel: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            // Đọc file CSV với encoding UTF-8
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                const lines = text.split('\n');
                 
-                const columns = line.split(',');
-                if (columns.length >= 2) {
-                    const stt = columns[0].trim();
-                    const name = columns[1].trim();
-                    if (stt && name) {
-                        this.duckNames.push(name);
+                this.duckNames = [];
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    const columns = line.split(',');
+                    if (columns.length >= 2) {
+                        const stt = columns[0].trim();
+                        const name = columns[1].trim();
+                        if (stt && name) {
+                            this.duckNames.push(name);
+                        }
                     }
                 }
-            }
-            
-            if (this.duckNames.length > 0) {
-                this.activeDuckNames = [...this.duckNames]; // Copy danh sách ban đầu
                 
-                // Loại bỏ các vịt đã thắng (nếu có lịch sử)
-                if (this.winners.length > 0) {
-                    const winnerNames = this.winners.map(w => w.name);
-                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                if (this.duckNames.length > 0) {
+                    this.activeDuckNames = [...this.duckNames];
+                    
+                    if (this.winners.length > 0) {
+                        const winnerNames = this.winners.map(w => w.name);
+                        this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                    }
+                    
+                    document.getElementById('duckCount').value = this.duckNames.length;
+                    alert(`Đã tải ${this.duckNames.length} tên từ file CSV!`);
+                } else {
+                    alert('Không đọc được tên từ file CSV.');
                 }
-                
-                document.getElementById('duckCount').value = this.duckNames.length;
-                alert(`Da tai ${this.duckNames.length} ten tu file!`);
-            } else {
-                alert('Khong doc duoc ten tu file.');
-            }
-        };
-        
-        reader.readAsText(file);
+            };
+            
+            // Chỉ định encoding UTF-8 để đọc tiếng Việt đúng
+            reader.readAsText(file, 'UTF-8');
+        }
     }
 
     startRace() {
@@ -518,9 +565,9 @@ class Game {
         this.trackHeight = this.trackContainer.clientHeight || 470;
         
         const fps = 60;
-        // Giảm target pixel để đua đúng thời gian (không chỉnh animation speed)
-        // Với rubber-banding và biến động tốc độ, vịt chạy chậm hơn nhiều so với max
-        const maxDuckSpeed = 1.8; // Giảm xuống để trackLength ngắn hơn, đua đúng thời gian
+        // Tăng maxDuckSpeed để bù cho rubber-banding và biến động tốc độ
+        // Với turbo và biến động, vịt có thể chạy nhanh hơn baseSpeed
+        const maxDuckSpeed = 7.0; // Tăng từ 4.0 lên 7.0 để đua đúng thời gian
         this.trackLength = maxDuckSpeed * fps * this.raceDuration;
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
