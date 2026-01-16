@@ -192,6 +192,16 @@ class Duck {
                 }
             }
             
+            // Check if approaching finish line (within 200px)
+            const distanceToFinish = this.trackLength - FINISH_LINE_OFFSET - this.position;
+            const decelerationZone = 200;
+            
+            if (distanceToFinish <= decelerationZone && distanceToFinish > 0) {
+                // Gradually slow down as approaching finish line
+                const slowdownFactor = distanceToFinish / decelerationZone;
+                this.targetSpeed = this.baseSpeed * slowdownFactor * 0.5;
+            }
+            
             this.acceleration = (this.targetSpeed - this.speed) * 0.05;
             this.speed += this.acceleration;
             this.speed = Math.max(this.minSpeed, Math.min(this.maxSpeed * 1.7, this.speed));
@@ -209,6 +219,7 @@ class Duck {
             // Allow duck to pass finish line by checking when left edge crosses
             if (this.position >= this.trackLength - FINISH_LINE_OFFSET) {
                 this.position = this.trackLength - FINISH_LINE_OFFSET;
+                this.speed = 0; // Stop completely at finish line
                 this.finished = true;
                 this.finishTime = Date.now();
             }
@@ -602,7 +613,7 @@ class Game {
         this.soundManager.setEnabled(document.getElementById('soundToggle').checked);
 
         if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 1000) {
-            alert(`So luong vit phai tu ${MINIMUM_PARTICIPANTS} den 1000!`);
+            alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 1000!`);
             return;
         }
 
@@ -700,10 +711,10 @@ class Game {
         this.currentRaceNumber = this.stats.totalRaces + 1;
         
         document.getElementById('raceNumber').textContent = `#${this.currentRaceNumber}`;
-        document.getElementById('raceStatus').textContent = 'Cho bat dau...';
+        document.getElementById('raceStatus').textContent = 'Waiting to start...';
         document.getElementById('timeLeft').textContent = `${this.raceDuration}s`;
         document.getElementById('pauseBtn').disabled = true;
-        document.getElementById('fullscreenBtn').textContent = '🚀 Bắt Đầu';
+        document.getElementById('fullscreenBtn').textContent = '🚀 Start';
 
         this.soundManager.init();
     }
@@ -740,10 +751,10 @@ class Game {
         this.raceStarted = true;
         this.startTime = Date.now();
         console.log('=== RACE START ===');
-        console.log('Thời gian bắt đầu:', new Date(this.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-        console.log('Target pixel (đích):', this.trackLength);
+        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
+        console.log('Target pixel (finish line):', this.trackLength);
         console.log('==================');
-        document.getElementById('raceStatus').textContent = 'Dang dua!';
+        document.getElementById('raceStatus').textContent = 'Racing!';
         document.getElementById('pauseBtn').disabled = false;
         document.getElementById('fullscreenBtn').textContent = '🔲 Fullscreen';
     }
@@ -852,7 +863,7 @@ class Game {
             this.pausedTime = Date.now();
             document.getElementById('pauseBtn').disabled = true;
             document.getElementById('resumeBtn').disabled = false;
-            document.getElementById('raceStatus').textContent = 'Tam dung';
+            document.getElementById('raceStatus').textContent = 'Paused';
         }
     }
 
@@ -863,7 +874,7 @@ class Game {
             this.startTime += pauseDuration;
             document.getElementById('pauseBtn').disabled = false;
             document.getElementById('resumeBtn').disabled = true;
-            document.getElementById('raceStatus').textContent = 'Dang dua!';
+            document.getElementById('raceStatus').textContent = 'Racing!';
             this.animate();
         }
     }
@@ -1089,18 +1100,18 @@ class Game {
             timestamp: new Date().toLocaleString('vi-VN')
         });
 
-        document.getElementById('raceStatus').textContent = 'Ket thuc!';
+        document.getElementById('raceStatus').textContent = 'Finished!';
         document.getElementById('timeLeft').textContent = '0s';
         document.getElementById('pauseBtn').disabled = true;
         
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
 
-        document.getElementById('resultTitle').innerHTML = '🏆 Cuoc Dua Ket Thuc!';
+        document.getElementById('resultTitle').innerHTML = '🏆 Race Finished!';
         
         let resultHTML = `
             <div class="result-winner">
-                <h3>🏆 Nha Vo Dich: ${winner.name} 🏆</h3>
+                <h3>🏆 Winner: ${winner.name} 🏆</h3>
                 <div style="width:30px;height:30px;background:${winner.color};border-radius:50%;margin:10px auto;"></div>
             </div>
             <div class="result-stats">
@@ -1168,9 +1179,9 @@ class Game {
         // Set winner stats
         const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
         winnerStatsEl.innerHTML = `
-            <p><strong>🕒 Thời gian:</strong> ${finishTime}s</p>
-            <p><strong>📍 Vị trí:</strong> Nhất</p>
-            <p><strong>🏁 Tổng vịt:</strong> ${this.duckCount}</p>
+            <p><strong>🕒 Time:</strong> ${finishTime}s</p>
+            <p><strong>📍 Position:</strong> 1st</p>
+            <p><strong>🏁 Total Racers:</strong> ${this.duckCount}</p>
         `;
         
         // Show popup with animation
@@ -1229,9 +1240,9 @@ class Game {
         // Ẩn result panel
         document.getElementById('resultPanel').classList.add('hidden');
         
-        // Kiểm tra còn đủ vịt để đua không
+        // Check if enough racers remain
         if (this.activeDuckNames.length < MINIMUM_PARTICIPANTS) {
-            alert(`Chỉ còn ${this.activeDuckNames.length} vịt! Không đủ để tiếp tục (cần ít nhất ${MINIMUM_PARTICIPANTS} vịt).`);
+            alert(`Only ${this.activeDuckNames.length} racers left! Not enough to continue (need at least ${MINIMUM_PARTICIPANTS} racers).`);
             this.showWinnersPanel();
             return;
         }
@@ -1252,21 +1263,45 @@ class Game {
             this.trackContainer.innerHTML = '';
         }
         
-        // Hiển thị số vịt còn lại
-        alert(`Tiếp tục với ${this.activeDuckNames.length} vịt còn lại!`);
+        // Display remaining racers count
+        alert(`Continue with ${this.activeDuckNames.length} remaining racers!`);
         
-        // Bắt đầu setup race mới
+        // Start new race setup
         this.setupRace();
+    }
+
+    goHome() {
+        // Stop the race if running
+        if (this.isRunning) {
+            this.stopRace();
+        }
+        
+        // Hide all panels
+        document.getElementById('resultPanel').classList.add('hidden');
+        document.getElementById('historyPanel').classList.add('hidden');
+        document.getElementById('raceTrack').classList.add('hidden');
+        document.getElementById('controlPanel').classList.add('hidden');
+        
+        // Show settings panel
+        document.getElementById('settingsPanel').classList.remove('hidden');
+        
+        // Exit fullscreen if active
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        }
+        
+        // Reset race state
+        this.reset();
     }
 
     showWinnersPanel() {
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
         
-        document.getElementById('resultTitle').innerHTML = '🏆 Kết Quả Các Giải';
+        document.getElementById('resultTitle').innerHTML = '🏆 Prize Results';
         
         let html = '<div class="winners-list">';
-        html += '<h3>🎉 Danh Sách Giải Thưởng 🎉</h3>';
+        html += '<h3>🎉 Prize List 🎉</h3>';
         
         if (this.winners.length > 0) {
             html += '<div class="winners-grid">';
@@ -1275,7 +1310,7 @@ class Game {
                 html += `
                     <div class="winner-card">
                         <div class="winner-medal">${medal}</div>
-                        <div class="winner-position">Giải ${winner.position}</div>
+                        <div class="winner-position">Prize ${winner.position}</div>
                         <div class="winner-duck-name">${winner.name}</div>
                         <div style="width:30px;height:30px;background:${winner.color};border-radius:50%;margin:10px auto;"></div>
                     </div>
@@ -1283,16 +1318,26 @@ class Game {
             });
             html += '</div>';
         } else {
-            html += '<p>Chưa có vịt nào thắng giải!</p>';
+            html += '<p>No winners yet!</p>';
         }
         
         html += '</div>';
-        html += '<div class="result-actions">';
-        html += '<button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>';
-        html += '<button class="btn btn-secondary" onclick="game.viewHistory()">📜 Xem Lịch Sử</button>';
+        html += '<div class="result-actions" id="resultActions">';
+        html += '<button class="btn btn-primary" onclick="game.fullReset()">🔄 Play Again</button>';
+        html += '<button class="btn btn-secondary" onclick="game.viewHistory()">📜 View History</button>';
+        html += '<button class="btn btn-secondary" onclick="game.toggleFullscreenResult()">🔍 View Fullscreen</button>';
         html += '</div>';
         
         document.getElementById('resultMessage').innerHTML = html;
+        
+        // Add click handler to result panel for fullscreen toggle
+        resultPanel.onclick = (e) => {
+            if (e.target === resultPanel || e.target.closest('.result-panel:not(.result-actions)')) {
+                if (!e.target.closest('button')) {
+                    this.toggleFullscreenResult();
+                }
+            }
+        };
         
         // Tự động cuộn đến panel kết quả
         setTimeout(() => {
@@ -1301,11 +1346,11 @@ class Game {
     }
 
     resetHistory() {
-        if (confirm('Bạn có chắc muốn xóa lịch sử chiến thắng và bắt đầu lại?')) {
+        if (confirm('Are you sure you want to clear victory history and start over?')) {
             this.winners = [];
             this.activeDuckNames = [...this.duckNames];
             this.saveWinners();
-            // Reload page để làm mới giao diện
+            // Reload page to refresh interface
             location.reload();
         }
     }
@@ -1319,18 +1364,31 @@ class Game {
         this.reset();
     }
 
-
+    toggleFullscreenResult() {
+        const resultPanel = document.getElementById('resultPanel');
+        const resultActions = document.getElementById('resultActions');
+        
+        if (resultPanel.classList.contains('fullscreen')) {
+            resultPanel.classList.remove('fullscreen');
+            if (resultActions) resultActions.style.display = 'flex';
+            document.body.style.overflow = '';
+        } else {
+            resultPanel.classList.add('fullscreen');
+            if (resultActions) resultActions.style.display = 'none';
+            document.body.style.overflow = 'hidden';
+        }
+    }
 
     viewHistory() {
         if (this.raceHistory.length === 0) {
-            alert('Chua co lich su dua!');
+            alert('No race history yet!');
             return;
         }
 
         const historyPanel = document.getElementById('historyPanel');
         const historyList = document.getElementById('historyList');
         
-        let html = '<table class="history-table"><thead><tr><th>Tran</th><th>Vo dich</th><th>So vit</th><th>Thoi gian</th><th>Ngay gio</th></tr></thead><tbody>';
+        let html = '<table class="history-table"><thead><tr><th>Race</th><th>Winner</th><th>Racers</th><th>Duration</th><th>Date/Time</th></tr></thead><tbody>';
         
         this.raceHistory.slice().reverse().forEach(race => {
             html += `<tr>

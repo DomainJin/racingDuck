@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> The Lucky Raccer </title>
-    <link rel="stylesheet" href="style.css?v=25">
+    <link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
     <div class="container">
         <h1> The Lucky Raccer </h1>
         
         <!-- Statistics Panel -->
-        <!-- Cài đặt game -->
+        <!-- Game Settings -->
         <div class="settings-panel" id="settingsPanel">
             <h2>Race Settings</h2>
             <div class="input-group">
@@ -43,7 +43,7 @@
             <button class="btn btn-primary" onclick="game.startRace()">Start Race</button>
         </div>
 
-        <!-- Thông tin đua -->
+        <!-- Race Info -->
         <div class="race-info hidden" id="raceInfo">
             <div class="info-item">
                 <span class="label">Race:</span>
@@ -61,6 +61,7 @@
 
         <!-- Control Panel -->
         <div class="control-panel hidden" id="controlPanel">
+            <button class="btn btn-small" onclick="game.goHome()" id="homeBtn">🏠 Home</button>
             <button class="btn btn-small" onclick="game.toggleFullscreen()" id="fullscreenBtn">🔲 Fullscreen</button>
             <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Pause</button>
             <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Resume</button>
@@ -98,7 +99,7 @@
 
         </div>
 
-        <!-- Bảng xếp hạng -->
+        <!-- Leaderboard -->
         <div class="history-win" id="historyWin">
             <h3>🏆 Victory History</h3>
             <div id="historyWinList"></div>
@@ -111,13 +112,13 @@
             <div id="highlightsList"></div>
         </div> -->
 
-        <!-- Kết quả -->
+        <!-- Results -->
         <div class="result-panel hidden" id="resultPanel">
             <h2 id="resultTitle">Results</h2>
             <div id="resultMessage"></div>
             <!-- <div class="result-actions">
-                <button class="btn btn-primary" onclick="game.fullReset()">🔄 Chơi Lại</button>
-                <button class="btn btn-secondary" onclick="game.viewHistory()">📜 Xem Lịch Sử</button>
+                <button class="btn btn-primary" onclick="game.fullReset()">🔄 Play Again</button>
+                <button class="btn btn-secondary" onclick="game.viewHistory()">📜 View History</button>
             </div> -->
         </div>
 

@@ -13,10 +13,24 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: url('static/horizontal.png') center/cover no-repeat fixed;
+    background: url('static/background.png') center/cover no-repeat fixed;
     min-height: 100vh;
     padding: 20px;
     color: #333;
+    position: relative;
+}
+
+/* Overlay for better text readability */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: -1;
+    pointer-events: none;
 }
 
 @keyframes gradientShift {
@@ -52,6 +66,61 @@ h1 {
 @keyframes glow {
     from { text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 215, 0, 0.4); }
     to { text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4), 0 0 40px rgba(255, 215, 0, 0.8); }
+}
+
+@keyframes waterBubble {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0.8;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(4);
+        opacity: 0;
+    }
+}
+
+@keyframes bubbleFloat {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.6;
+    }
+    90% {
+        opacity: 0.3;
+    }
+    100% {
+        transform: translateY(-100px) scale(1.5);
+        opacity: 0;
+    }
+}
+
+@keyframes bubble {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(30px, -30px) scale(1.1);
+    }
+    66% {
+        transform: translate(-30px, 30px) scale(0.9);
+    }
+}
+
+@keyframes bubble {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(30px, -30px) scale(1.1);
+    }
+    66% {
+        transform: translate(-30px, 30px) scale(0.9);
+    }
 }
 
 /* Big Timer Display - Integrated with banktop */
@@ -109,15 +178,75 @@ h1 {
 .settings-panel,
 .result-panel,
 .history-panel {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+    background: transparent;
     border-radius: 20px;
     padding: 35px;
     margin-bottom: 20px;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3),
-                inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.2);
     animation: fadeIn 0.5s ease-out;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s ease;
+}
+
+.settings-panel:hover,
+.history-panel:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4),
+                0 0 40px rgba(102, 126, 234, 0.4),
+                inset 0 0 30px rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.result-panel:hover {
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4),
+                0 0 40px rgba(102, 126, 234, 0.4),
+                inset 0 0 30px rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Bubble effect for panels */
+.settings-panel::before,
+.result-panel::before,
+.history-panel::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(102, 126, 234, 0.05) 0%, transparent 70%);
+    animation: bubble 15s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.settings-panel::after,
+.result-panel::after,
+.history-panel::after {
+    content: '';
+    position: absolute;
+    bottom: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(118, 75, 162, 0.03) 0%, transparent 70%);
+    animation: bubble 20s ease-in-out infinite reverse;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Ensure content is above bubbles */
+.settings-panel > *,
+.result-panel > *,
+.history-panel > * {
+    position: relative;
+    z-index: 1;
 }
 
 @keyframes fadeIn {
@@ -134,15 +263,15 @@ h1 {
 .settings-panel h2,
 .result-panel h2,
 .history-panel h2 {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #ffffff;
     margin-bottom: 25px;
     text-align: center;
     font-size: 2em;
     font-weight: 800;
     letter-spacing: 2px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6),
+                 0 0 20px rgba(102, 126, 234, 0.8),
+                 0 0 40px rgba(118, 75, 162, 0.5);
 }
 
 .input-group {
@@ -155,8 +284,10 @@ h1 {
 
 .input-group label {
     font-weight: bold;
-    color: #555;
+    color: #ffffff;
     min-width: 150px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5),
+                 0 0 10px rgba(255, 255, 255, 0.2);
 }
 
 .input-group input[type="number"],
@@ -204,14 +335,34 @@ h1 {
     width: 0;
     height: 0;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
     transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
+    transition: width 0.6s ease-out, height 0.6s ease-out;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.5),
+                inset 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.4) 60%, transparent 80%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
 }
 
 .btn:hover::before {
     width: 300px;
     height: 300px;
+}
+
+.btn:hover::after {
+    animation: waterBubble 1s ease-out infinite;
 }
 
 .btn-primary {
@@ -250,14 +401,25 @@ h1 {
 
 /* Race Info */
 .race-info {
-    background: rgba(255, 255, 255, 0.95);
+    background: transparent;
     border-radius: 15px;
     padding: 20px;
     margin-bottom: 20px;
     display: flex;
     justify-content: space-around;
     align-items: center;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.4s ease;
+}
+
+.race-info:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(102, 126, 234, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.5);
 }
 
 .info-item {
@@ -267,15 +429,21 @@ h1 {
 .info-item .label {
     display: block;
     font-size: 14px;
-    color: #666;
+    color: #ffffff;
     margin-bottom: 5px;
+    font-weight: 600;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5),
+                 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .info-item .value {
     display: block;
     font-size: 24px;
     font-weight: bold;
-    color: #667eea;
+    color: #ffffff;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6),
+                 0 0 15px rgba(102, 126, 234, 0.8),
+                 0 0 30px rgba(102, 126, 234, 0.4);
 }
 
 /* Control Panel */
@@ -686,32 +854,39 @@ h1 {
 
 /* Leaderboard */
 .leaderboard {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+    background: transparent;
     border-radius: 20px;
     padding: 25px;
     margin-bottom: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2),
-                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     max-height: 500px;
     overflow-y: auto;
-    border: 2px solid rgba(102, 126, 234, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.4s ease;
+}
+
+.leaderboard:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                0 0 35px rgba(102, 126, 234, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.5);
 }
 
 .leaderboard h3 {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #ffffff;
     margin-bottom: 20px;
     text-align: center;
     position: sticky;
     top: 0;
-    background: rgba(255, 255, 255, 0.98);
     padding: 15px 0;
     z-index: 10;
     font-size: 1.4em;
     font-weight: 800;
-    backdrop-filter: blur(10px);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6),
+                 0 0 20px rgba(102, 126, 234, 0.8),
+                 0 0 40px rgba(118, 75, 162, 0.5);
 }
 
 #historyWinList ol {
@@ -722,73 +897,110 @@ h1 {
 #historyWinList li {
     padding: 12px 15px;
     margin: 6px 0;
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     display: flex;
     align-items: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     border-left: 4px solid transparent;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1.05em;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8),
+                 0 0 15px rgba(255, 255, 255, 0.6),
+                 0 0 30px rgba(255, 255, 255, 0.3);
 }
 
 #historyWinList li:hover {
-    background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+    background: rgba(255, 255, 255, 0.3);
     transform: translateX(8px) scale(1.02);
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     border-left-color: #667eea;
 }
 
 #historyWinList li:nth-child(1) {
-    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    background: rgba(255, 215, 0, 0.3);
     font-weight: bold;
     border-left-color: #ffd700;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8),
+                 0 0 20px rgba(255, 215, 0, 0.8),
+                 0 0 40px rgba(255, 215, 0, 0.4);
 }
 
 #historyWinList li:nth-child(2) {
-    background: linear-gradient(135deg, #c0c0c0 0%, #e8e8e8 100%);
+    background: rgba(192, 192, 192, 0.3);
     font-weight: bold;
     border-left-color: #c0c0c0;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8),
+                 0 0 20px rgba(192, 192, 192, 0.8),
+                 0 0 40px rgba(192, 192, 192, 0.4);
 }
 
 #historyWinList li:nth-child(3) {
-    background: linear-gradient(135deg, #cd7f32 0%, #e8b17f 100%);
+    background: rgba(205, 127, 50, 0.3);
     font-weight: bold;
     border-left-color: #cd7f32;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8),
+                 0 0 20px rgba(205, 127, 50, 0.8),
+                 0 0 40px rgba(205, 127, 50, 0.4);
 }
 
 /* Highlights Panel */
 .highlights-panel {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+    background: transparent;
     border-radius: 20px;
     padding: 25px;
     margin-bottom: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2),
-                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     max-height: 400px;
     overflow-y: auto;
-    border: 2px solid rgba(255, 165, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.4s ease;
+}
+
+.highlights-panel:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                0 0 35px rgba(240, 147, 251, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.5);
 }
 
 .highlights-panel h3 {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #ffffff;
     margin-bottom: 20px;
     text-align: center;
     font-size: 1.3em;
     font-weight: 700;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6),
+                 0 0 20px rgba(240, 147, 251, 0.8),
+                 0 0 40px rgba(245, 87, 108, 0.5);
 }
 
 .highlight-item {
     padding: 12px 15px;
     margin: 10px 0;
-    background: linear-gradient(135deg, #fff3cd 0%, #fff9e6 100%);
+    background: rgba(255, 243, 205, 0.2);
     border-radius: 12px;
     border-left: 5px solid #ffc107;
     animation: highlightFadeIn 0.5s ease-out, highlightPulse 2s ease-in-out infinite;
     box-shadow: 0 3px 10px rgba(255, 193, 7, 0.3);
     font-weight: 500;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6),
+                 0 0 8px rgba(255, 193, 7, 0.4);
 }
 
 @keyframes highlightFadeIn {
@@ -816,6 +1028,48 @@ h1 {
 .result-panel {
     text-align: center;
     animation: slideIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    background: url('static/result.png') center/cover no-repeat;
+    padding: 40px;
+    border-radius: 30px;
+    position: relative;
+    transition: all 0.5s ease;
+    cursor: pointer;
+}
+
+.result-panel.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px;
+    cursor: default;
+}
+
+.result-panel.fullscreen #resultTitle {
+    font-size: 4em;
+    margin-bottom: 40px;
+}
+
+.result-panel.fullscreen .winners-list h3 {
+    font-size: 3em;
+    margin-bottom: 50px;
+}
+
+.result-panel.fullscreen .winners-grid {
+    gap: 40px;
+    max-width: 1400px;
+}
+
+.result-panel.fullscreen .winner-card {
+    transform: scale(1.2);
 }
 
 /* Victory Popup */
@@ -853,7 +1107,7 @@ h1 {
 .victory-content {
     position: relative;
     z-index: 2;
-    background: linear-gradient(135deg, #dad60c 0%, #ee1e1e 100%);
+    background: linear-gradient(135deg, rgba(218, 214, 12, 0.9) 0%, rgba(238, 30, 30, 0.9) 100%);
     border-radius: 50%;
     padding: 50px;
     width: min(90vw, 90vh, 600px);
@@ -865,6 +1119,8 @@ h1 {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .victory-popup.show .victory-content {
@@ -981,15 +1237,15 @@ h1 {
 #resultTitle {
     font-size: 2.8em;
     margin-bottom: 25px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #ffd700 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     animation: titleBounce 1s ease-in-out infinite;
-    filter: drop-shadow(2px 2px 0px #764ba2) 
-        drop-shadow(-2px -2px 0px #667eea)
-        drop-shadow(2px -2px 0px #f093fb)
-        drop-shadow(-2px 2px 0px #f5576c);
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 1)) 
+        drop-shadow(0 0 20px rgba(255, 215, 0, 0.8))
+        drop-shadow(0 0 30px rgba(255, 215, 0, 0.6))
+        drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.8));
         text-transform: uppercase;
         font-style: italic;
         letter-spacing: 4px;
@@ -1001,14 +1257,31 @@ h1 {
 }
 
 .result-winner {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: transparent;
     color: white;
-    padding: 30px;
-    border-radius: 20px;
-    margin-bottom: 25px;
-    animation: pulse 1.5s ease-in-out infinite, rainbow 5s linear infinite;
-    box-shadow: 0 10px 30px rgba(240, 147, 251, 0.5),
-                0 0 50px rgba(245, 87, 108, 0.3);
+    padding: 50px;
+    border-radius: 50%;
+    margin: 0 auto 30px;
+    width: min(80vw, 500px);
+    height: min(80vw, 500px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.4s ease;
+}
+
+.result-winner:hover {
+    background: linear-gradient(135deg, rgba(240, 147, 251, 0.3) 0%, rgba(245, 87, 108, 0.3) 100%);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    animation: pulse 1.5s ease-in-out infinite;
+    box-shadow: 0 20px 50px rgba(240, 147, 251, 0.6),
+                0 0 60px rgba(245, 87, 108, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.6);
+    transform: scale(1.05);
 }
 
 @keyframes pulse {
@@ -1024,23 +1297,48 @@ h1 {
 .result-winner h3 {
     font-size: 2.2em;
     margin: 0;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+    color: #ffffff;
+    font-weight: 800;
+    text-shadow: 0 4px 10px rgba(0, 0, 0, 1),
+                 0 0 25px rgba(255, 255, 255, 1),
+                 0 0 50px rgba(255, 215, 0, 0.8),
+                 0 0 75px rgba(255, 215, 0, 0.5);
 }
 
 .result-stats {
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-    padding: 25px;
-    border-radius: 15px;
-    margin-bottom: 25px;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
-    border: 2px solid rgba(102, 126, 234, 0.2);
+    background: transparent;
+    padding: 40px;
+    border-radius: 50%;
+    margin: 0 auto 30px;
+    width: min(75vw, 450px);
+    height: min(75vw, 450px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.4s ease;
+}
+
+.result-stats:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                0 0 50px rgba(102, 126, 234, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.6);
+    transform: scale(1.05);
 }
 
 .result-stats p {
     font-size: 19px;
     margin: 12px 0;
-    color: #555;
-    font-weight: 600;
+    color: #ffffff;
+    font-weight: 700;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 1),
+                 0 0 20px rgba(255, 255, 255, 0.9),
+                 0 0 40px rgba(255, 255, 255, 0.6),
+                 0 0 60px rgba(102, 126, 234, 0.5);
 }
 
 .result-actions {
@@ -1161,13 +1459,17 @@ h1 {
 }
 
 .winners-list h3 {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #ff69b4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     font-size: 2em;
     margin-bottom: 30px;
     animation: titleBounce 1s ease-in-out infinite;
+    filter: drop-shadow(0 0 15px rgba(255, 255, 255, 1)) 
+        drop-shadow(0 0 30px rgba(255, 105, 180, 0.9))
+        drop-shadow(0 0 45px rgba(255, 105, 180, 0.6))
+        drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.9));
 }
 
 .winners-grid {
@@ -1178,18 +1480,61 @@ h1 {
 }
 
 .winner-card {
-    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 15px;
     padding: 20px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    border: 2px solid transparent;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    transition: all 0.4s ease;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.winner-card::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    background: radial-gradient(circle, rgba(102, 126, 234, 0.6) 0%, rgba(118, 75, 162, 0.3) 50%, transparent 70%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+    transition: none;
+}
+
+.winner-card:hover::before {
+    animation: waterBubble 0.8s ease-out;
+}
+
+.winner-card::after {
+    content: '';
+    position: absolute;
+    bottom: -50px;
+    left: 20%;
+    width: 15px;
+    height: 15px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(102, 126, 234, 0.4) 50%, transparent 70%);
+    border-radius: 50%;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.winner-card:hover::after {
+    animation: bubbleFloat 1.5s ease-in-out infinite;
 }
 
 .winner-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     transform: translateY(-5px) scale(1.05);
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-    border-color: #667eea;
+    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4),
+                0 0 50px rgba(102, 126, 234, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.5);
 }
 
 .winner-medal {
@@ -1201,13 +1546,20 @@ h1 {
 .winner-position {
     font-size: 1.2em;
     font-weight: bold;
-    color: #667eea;
+    color: #ffffff;
     margin-bottom: 10px;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 1),
+                 0 0 20px rgba(255, 255, 255, 0.9),
+                 0 0 40px rgba(102, 126, 234, 0.8),
+                 0 0 60px rgba(102, 126, 234, 0.5);
 }
 
 .winner-duck-name {
     font-size: 1.1em;
     font-weight: 600;
-    color: #333;
+    color: #ffffff;
     margin-bottom: 10px;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 1),
+                 0 0 15px rgba(255, 255, 255, 0.8),
+                 0 0 30px rgba(255, 255, 255, 0.4);
 }
