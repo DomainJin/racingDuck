@@ -167,18 +167,22 @@ class Duck {
         this.wobbleOffset = Math.random() * Math.PI * 2;
         this.previousPosition = 0;
         this.previousRank = 0;
+        // Timers now in milliseconds for delta time
         this.speedChangeTimer = 0;
+        this.speedChangeInterval = 500 + Math.random() * 500; // 500-1000ms
         this.targetSpeed = this.baseSpeed;
         this.particles = [];
         this.turboActive = false;
         this.turboTimer = 0;
+        this.turboDuration = 833; // ~50 frames at 60fps = 833ms
         this.wingFlapSpeed = 1;
         this.laneOffset = 0;
         this.targetLaneOffset = 0;
         this.laneChangeTimer = 0;
+        this.laneChangeInterval = 2000; // 2 seconds
         this.currentFrame = 0;
         this.lastFrameTime = 0;
-        this.targetFPS = 60; // FPS cho animation webp
+        this.animationFPS = 12; // FPS cho animation webp
     }
 
     generateColor() {
@@ -196,31 +200,31 @@ class Duck {
         this.targetSpeed = this.baseSpeed;
     }
 
-    update(time, currentRank, totalDucks) {
+    update(time, currentRank, totalDucks, deltaTime = 1.0) {
         this.previousPosition = this.position;
         if (!this.finished) {
-            // Lane changing logic
-            this.laneChangeTimer--;
+            // Lane changing logic (time-based)
+            this.laneChangeTimer -= (16.67 * deltaTime); // deltaTime normalized to 60fps frame time
             if (this.laneChangeTimer <= 0 && Math.random() > 0.85) {
-                this.laneChangeTimer = Math.random() * 120 + 60;
+                this.laneChangeTimer = this.laneChangeInterval + (Math.random() * 2000); // 2000-4000ms
                 this.targetLaneOffset = (Math.random() - 0.5) * 40;
             }
             
             // Smooth lane transition
-            this.laneOffset += (this.targetLaneOffset - this.laneOffset) * 0.05;
+            this.laneOffset += (this.targetLaneOffset - this.laneOffset) * 0.05 * deltaTime;
             
             // Animation frame update với FPS cố định 12
             const currentTime = Date.now();
-            const frameInterval = 1000 / this.targetFPS; // ~83ms cho 12 FPS
+            const frameInterval = 1000 / this.animationFPS; // ~83ms cho 12 FPS
             if (currentTime - this.lastFrameTime >= frameInterval) {
                 this.lastFrameTime = currentTime;
                 this.currentFrame = (this.currentFrame + 1) % 3; // Cycle through 0, 1, 2
             }
             
-            // Speed change with rubber banding
-            this.speedChangeTimer--;
+            // Speed change with rubber banding (time-based)
+            this.speedChangeTimer -= (16.67 * deltaTime);
             if (this.speedChangeTimer <= 0) {
-                this.speedChangeTimer = Math.random() * 30 + 15;
+                this.speedChangeTimer = this.speedChangeInterval;
                 const rand = Math.random();
                 
                 // Strong rubber banding: leaders very likely to slow down
@@ -239,7 +243,7 @@ class Duck {
                     const boostMultiplier = isLagging ? 1.8 : 1.4;
                     this.targetSpeed = this.maxSpeed * (boostMultiplier + Math.random() * 0.5);
                     this.turboActive = true;
-                    this.turboTimer = 50;
+                    this.turboTimer = this.turboDuration; // 833ms (~50 frames at 60fps)
                     this.wingFlapSpeed = 3;
                 } else if (rand > 0.60) {
                     // Fast speed
@@ -258,7 +262,7 @@ class Duck {
             }
             
             if (this.turboActive) {
-                this.turboTimer--;
+                this.turboTimer -= (16.67 * deltaTime);
                 if (this.turboTimer <= 0) {
                     this.turboActive = false;
                 }
@@ -266,8 +270,8 @@ class Duck {
                     this.particles.push({
                         x: this.position,
                         y: 0,
-                        vx: -2 - Math.random() * 2,
-                        vy: (Math.random() - 0.5) * 2,
+                        vx: (-2 - Math.random() * 2) * deltaTime,
+                        vy: (Math.random() - 0.5) * 2 * deltaTime,
                         life: 20,
                         maxLife: 20
                     });
@@ -288,8 +292,10 @@ class Duck {
             this.speed += this.acceleration;
             this.speed = Math.max(this.minSpeed, Math.min(this.maxSpeed * 1.7, this.speed));
             
-            this.position += this.speed + (Math.random() - 0.5) * 0.3;
+            // Position movement normalized to 60 FPS
+            this.position += (this.speed + (Math.random() - 0.5) * 0.3) * deltaTime;
             
+            // Update particles (time-based)
             this.particles = this.particles.filter(p => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -342,6 +348,12 @@ class Game {
         this.pausedTime = 0;
         this.rankings = [];
         this.soundManager = new SoundManager();
+        
+        // Delta time normalization - 60 FPS baseline
+        this.targetFPS = 60;
+        this.targetFrameTime = 1000 / this.targetFPS; // ~16.67ms
+        this.lastFrameTime = 0;
+        this.deltaTime = 1.0; // Multiplier for frame-independent movement
         
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
@@ -775,15 +787,20 @@ class Game {
         // Use raceRiver height (excludes bank_top and bank_bot)
         this.trackHeight = this.trackContainer.clientHeight || 470;
         
-        // Tính trackLength dựa trên tốc độ thực tế với rubber-banding
-        // Quan sát: race càng dài, tốc độ trung bình càng cao do nhiều vịt luân phiên dẫn đầu
-        // 30s: thiếu 33% | 60s: thiếu 17% | 120s: thiếu 25% | 180s: thiếu 22%
-        // baseSpeed: 3.6 px/frame @ 60 FPS, nhưng rubber-banding giảm hiệu quả
-        const basePxPerSec = 70; // Giảm base vì tốc độ thực tế cao hơn dự kiến
-        // Tăng factor mạnh hơn cho race dài: +50% cho 60s, +80% cho 120s, +100% cho 180s
-        const durationFactor = Math.min(2.0, 1 + (this.raceDuration / 90)); 
-        const pixelsPerSecond = basePxPerSec * durationFactor;
+        // Tính trackLength dựa trên tốc độ thực tế với delta time normalization
+        // baseSpeed: 3.2-4.0 px/frame (avg 3.6) @ 60 FPS với deltaTime = 1.0
+        // Tốc độ thực tế: 3.6 px/frame * 60 fps = 216 px/s
+        // Rubber-banding làm giảm tốc độ trung bình ~30% (leaders bị slow down)
+        // Turbo boost tăng tốc độ cho laggers ~20%
+        // => Tốc độ hiệu quả: 216 * 0.85 = ~183 px/s (balanced)
+        // UPDATE: Quan sát thực tế cho thấy vịt chạy NHANH GẤP 2 LẦN → giảm xuống 1/2
+        const baseEffectiveSpeed = 366; // px/s - doubled from observation (183 * 2)
+        // Race dài hơn cần track dài hơn một chút do dynamic không ổn định
+        const durationFactor = Math.min(1.15, 1.0 + (this.raceDuration / 600)); 
+        const pixelsPerSecond = baseEffectiveSpeed * durationFactor;
         this.trackLength = this.raceDuration * pixelsPerSecond;
+        
+        console.log(`[Track Setup] Duration: ${this.raceDuration}s | Speed: ${pixelsPerSecond.toFixed(1)} px/s | Track: ${this.trackLength.toFixed(0)}px | Expected finish: ${(this.trackLength / baseEffectiveSpeed).toFixed(1)}s`);
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
         
@@ -802,6 +819,9 @@ class Game {
 
         this.ducks = [];
         // this.highlights = [];
+        
+        // Ẩn finish line từ race trước
+        document.getElementById('finishLine').classList.add('hidden');
         
         // Khởi tạo activeDuckNames nếu chưa có
         if (this.activeDuckNames.length === 0) {
@@ -871,6 +891,9 @@ class Game {
 
     beginRace() {
         if (this.raceStarted) return;
+        
+        // Ẩn finish line (sẽ hiện lại khi gần đích)
+        document.getElementById('finishLine').classList.add('hidden');
         
         // Auto fullscreen
         const track = document.getElementById('raceTrack');
@@ -1039,6 +1062,17 @@ class Game {
 
         this.animationId = requestAnimationFrame((ts) => this.animate(ts));
 
+        // Calculate delta time for frame-independent movement
+        if (!this.lastFrameTime) this.lastFrameTime = timestamp || Date.now();
+        const currentTime = timestamp || Date.now();
+        const frameTime = currentTime - this.lastFrameTime;
+        this.lastFrameTime = currentTime;
+        
+        // Delta time multiplier: 1.0 at 60fps, >1.0 for slower fps, <1.0 for faster fps
+        this.deltaTime = frameTime / this.targetFrameTime;
+        // Clamp delta time to prevent huge jumps (max 4x, min 0.25x)
+        this.deltaTime = Math.max(0.25, Math.min(4.0, this.deltaTime));
+
         const elapsed = (Date.now() - this.startTime) / 1000;
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
         document.getElementById('timeLeft').textContent = `${timeLeft.toFixed(1)}s`;
@@ -1062,7 +1096,7 @@ class Game {
 
         this.ducks.forEach(duck => {
             const currentRank = this.rankings.findIndex(d => d.id === duck.id) + 1 || this.ducks.length;
-            duck.update(timestamp || Date.now(), currentRank, this.ducks.length);
+            duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime);
         });
 
         const oldRankings = [...this.rankings];
@@ -1073,8 +1107,15 @@ class Game {
             const leader = this.rankings[0];
             const distanceToFinish = this.trackLength - leader.position;
             
-            // Log thông tin vịt dẫn đầu real-time
-            console.log(`[Leader] ${leader.name} | Position: ${leader.position.toFixed(2)}px | Còn lại: ${distanceToFinish.toFixed(2)}px | Thời gian: ${elapsed.toFixed(2)}s`);
+            // Log thông tin vịt dẫn đầu real-time với tốc độ và delta time
+            const leaderSpeed = leader.speed || 0;
+            const effectiveSpeed = leaderSpeed * this.deltaTime;
+            const estimatedTimeToFinish = distanceToFinish / (effectiveSpeed * 60 || 1); // Convert to seconds
+            
+            // Log every 1 second
+            if (Math.floor(elapsed) !== Math.floor(elapsed - (this.deltaTime * this.targetFrameTime / 1000))) {
+                console.log(`[${elapsed.toFixed(1)}s] Leader: ${leader.name} | Pos: ${leader.position.toFixed(0)}/${this.trackLength} (${(leader.position/this.trackLength*100).toFixed(1)}%) | Speed: ${effectiveSpeed.toFixed(2)} px/frame | ETA: ${estimatedTimeToFinish.toFixed(1)}s | Delta: ${this.deltaTime.toFixed(3)}`);
+            }
             
             let targetCameraOffset;
             let cameraMaxOffset;
@@ -1105,12 +1146,12 @@ class Game {
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
         }
 
-        // Update background offset continuously
-        this.backgroundOffset += 15; // Constant scroll speed
+        // Update background offset continuously (time-based)
+        this.backgroundOffset += 15 * this.deltaTime; // Constant scroll speed normalized to 60fps
         
         this.updateDuckPositions();
         this.updateBackgrounds();
-        this.updateLeaderboard();
+        // this.updateLeaderboard(); // Function removed
     }
 
     updateDuckPositions() {
