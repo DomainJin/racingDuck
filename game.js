@@ -10,6 +10,8 @@ class SoundManager {
         this.enabled = true;
         this.context = null;
         this.initialized = false;
+        this.raceLoopInterval = null;
+        this.crowdNoiseInterval = null;
     }
 
     init() {
@@ -24,24 +26,82 @@ class SoundManager {
 
     playStartSound() {
         if (!this.enabled || !this.initialized) return;
-        this.playBeep(800, 0.1, 0.2);
-        setTimeout(() => this.playBeep(1000, 0.1, 0.2), 200);
-        setTimeout(() => this.playBeep(1200, 0.2, 0.3), 400);
+        // Horn sound - trumpet style
+        this.playBeep(500, 0.15, 0.3);
+        setTimeout(() => this.playBeep(600, 0.15, 0.3), 100);
+        setTimeout(() => this.playBeep(700, 0.2, 0.5), 200);
     }
 
     playCrowdCheer() {
         if (!this.enabled || !this.initialized) return;
-        for (let i = 0; i < 5; i++) {
+        // Victory crowd sound
+        for (let i = 0; i < 10; i++) {
             setTimeout(() => {
-                this.playBeep(300 + Math.random() * 400, 0.05, 0.1);
-            }, i * 100);
+                this.playBeep(300 + Math.random() * 500, 0.08, 0.15);
+            }, i * 80);
         }
     }
 
     playFinishSound() {
         if (!this.enabled || !this.initialized) return;
-        this.playBeep(1500, 0.1, 0.3);
-        setTimeout(() => this.playBeep(1800, 0.2, 0.4), 150);
+        // Victory fanfare
+        this.playBeep(1000, 0.15, 0.2);
+        setTimeout(() => this.playBeep(1200, 0.15, 0.2), 150);
+        setTimeout(() => this.playBeep(1500, 0.2, 0.4), 300);
+        
+        // Add crowd cheer
+        setTimeout(() => this.playCrowdCheer(), 200);
+    }
+
+    // Horse galloping sound effect
+    playHorseGallop() {
+        if (!this.enabled || !this.initialized) return;
+        // Simulate horse hooves - 4 beats in quick succession
+        const hoofFreq = 180;
+        const beatDelay = 80;
+        
+        for (let i = 0; i < 4; i++) {
+            setTimeout(() => {
+                this.playNoise(hoofFreq + Math.random() * 40, 0.08, 0.05);
+            }, i * beatDelay);
+        }
+    }
+
+    // Start continuous racing ambiance
+    startRacingAmbiance() {
+        if (!this.enabled || !this.initialized) return;
+        
+        // Horse galloping loop - continuous hooves sound
+        this.raceLoopInterval = setInterval(() => {
+            // Multiple horses galloping
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    this.playHorseGallop();
+                }, i * 100);
+            }
+        }, 600);
+
+        // Background crowd noise
+        this.crowdNoiseInterval = setInterval(() => {
+            // Random crowd murmur
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    this.playBeep(200 + Math.random() * 300, 0.02, 0.3);
+                }, Math.random() * 500);
+            }
+        }, 800);
+    }
+
+    // Stop racing ambiance
+    stopRacingAmbiance() {
+        if (this.raceLoopInterval) {
+            clearInterval(this.raceLoopInterval);
+            this.raceLoopInterval = null;
+        }
+        if (this.crowdNoiseInterval) {
+            clearInterval(this.crowdNoiseInterval);
+            this.crowdNoiseInterval = null;
+        }
     }
 
     playBeep(frequency, volume, duration) {
@@ -62,8 +122,30 @@ class SoundManager {
         oscillator.stop(this.context.currentTime + duration);
     }
 
+    // Noise generator for hoof sounds
+    playNoise(frequency, volume, duration) {
+        if (!this.context) return;
+        const oscillator = this.context.createOscillator();
+        const gainNode = this.context.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.context.destination);
+        
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'square'; // Square wave for percussive hoof sound
+        
+        gainNode.gain.setValueAtTime(volume, this.context.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + duration);
+        
+        oscillator.start(this.context.currentTime);
+        oscillator.stop(this.context.currentTime + duration);
+    }
+
     setEnabled(enabled) {
         this.enabled = enabled;
+        if (!enabled) {
+            this.stopRacingAmbiance();
+        }
     }
 }
 
@@ -375,13 +457,57 @@ class Game {
         this.duckImages = [];
         this.iconCount = 0;
         this.imagesLoaded = false;
+        this.disableStartButton();
         this.detectAndLoadDuckImages();
+    }
+
+    // Loading UI helper methods
+    showLoading(message, progress) {
+        const loadingContainer = document.getElementById('loadingContainer');
+        const loadingText = document.getElementById('loadingText');
+        const loadingProgress = document.getElementById('loadingProgress');
+        
+        loadingContainer.classList.remove('hidden');
+        loadingText.textContent = message;
+        loadingProgress.textContent = `${progress}%`;
+    }
+
+    updateLoadingProgress(message, progress) {
+        const loadingText = document.getElementById('loadingText');
+        const loadingProgress = document.getElementById('loadingProgress');
+        
+        loadingText.textContent = message;
+        loadingProgress.textContent = `${progress}%`;
+    }
+
+    hideLoading() {
+        const loadingContainer = document.getElementById('loadingContainer');
+        loadingContainer.classList.add('hidden');
+    }
+
+    enableStartButton() {
+        const startBtn = document.getElementById('startRaceBtn');
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Race';
+        
+        // Show success notification
+        this.updateLoadingProgress('✓ All icons loaded successfully!', 100);
+        setTimeout(() => {
+            this.hideLoading();
+        }, 1500);
+    }
+
+    disableStartButton() {
+        const startBtn = document.getElementById('startRaceBtn');
+        startBtn.disabled = true;
+        startBtn.textContent = 'Loading...';
     }
 
     detectAndLoadDuckImages() {
         // Tự động detect số folder có sẵn trong theme
         console.log(`Starting icon detection for theme: ${this.currentTheme}`);
         document.getElementById('iconCount').textContent = 'Detecting icons...';
+        this.showLoading('Detecting icons...', 0);
         
         const maxFolders = 50; // Kiểm tra tối đa 50 folders
         let detectedCount = 0;
@@ -397,6 +523,9 @@ class Game {
                 console.log(`✓ Found folder ${folderNum}`);
                 detectedCount++;
                 consecutiveFails = 0;
+                
+                const progress = Math.round((detectedCount / maxFolders) * 50); // 50% cho detection
+                this.updateLoadingProgress(`Detecting icons... (${detectedCount} found)`, progress);
                 
                 if (folderNum < maxFolders) {
                     checkFolder(folderNum + 1);
@@ -422,6 +551,8 @@ class Game {
                         this.loadAllDuckImages();
                     } else {
                         console.error('No icons found! Check if files exist in:', this.currentTheme);
+                        this.hideLoading();
+                        alert('No icons found! Please check the icon theme.');
                     }
                 }
             };
@@ -433,12 +564,15 @@ class Game {
     loadAllDuckImages() {
         if (this.iconCount === 0) {
             console.warn('No icons detected!');
+            this.hideLoading();
             return;
         }
         
         // Load 3 frames từ mỗi folder
         let loadedFolders = 0;
         const totalFolders = this.iconCount;
+        
+        this.updateLoadingProgress(`Loading ${totalFolders} animated icons...`, 50);
         
         for (let folderNum = 1; folderNum <= totalFolders; folderNum++) {
             const frames = [];
@@ -453,10 +587,15 @@ class Game {
                     loadedFrames++;
                     if (loadedFrames === 3) {
                         loadedFolders++;
+                        const progress = 50 + Math.round((loadedFolders / totalFolders) * 50); // 50-100%
+                        this.updateLoadingProgress(`Loading icons: ${loadedFolders}/${totalFolders}`, progress);
+                        
                         if (loadedFolders === totalFolders) {
                             this.imagesLoaded = true;
                             console.log(`Loaded ${totalFolders} duck animations (3 frames each) from ${this.currentTheme}!`);
                             document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                            this.hideLoading();
+                            this.enableStartButton();
                         }
                     }
                 };
@@ -466,9 +605,14 @@ class Game {
                     loadedFrames++;
                     if (loadedFrames === 3) {
                         loadedFolders++;
+                        const progress = 50 + Math.round((loadedFolders / totalFolders) * 50);
+                        this.updateLoadingProgress(`Loading icons: ${loadedFolders}/${totalFolders}`, progress);
+                        
                         if (loadedFolders === totalFolders) {
                             this.imagesLoaded = true;
                             document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                            this.hideLoading();
+                            this.enableStartButton();
                         }
                     }
                 };
@@ -604,6 +748,12 @@ class Game {
     }
 
     startRace() {
+        // Check if images are loaded
+        if (!this.imagesLoaded) {
+            alert('Please wait for all icons to load before starting the race!');
+            return;
+        }
+        
         this.setupRace();
     }
 
@@ -730,6 +880,7 @@ class Game {
                 // Show countdown after fullscreen is activated
                 this.showCountdown(() => {
                     this.soundManager.playStartSound();
+                    this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
                     this.animate();
                 });
             }).catch(err => {
@@ -737,6 +888,7 @@ class Game {
                 // Show countdown anyway if fullscreen fails
                 this.showCountdown(() => {
                     this.soundManager.playStartSound();
+                    this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
                     this.animate();
                 });
             });
@@ -744,6 +896,7 @@ class Game {
             // Already in fullscreen, show countdown immediately
             this.showCountdown(() => {
                 this.soundManager.playStartSound();
+                this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
                 this.animate();
             });
         }
@@ -861,6 +1014,7 @@ class Game {
         if (!this.racePaused && this.raceStarted && !this.raceFinished) {
             this.racePaused = true;
             this.pausedTime = Date.now();
+            this.soundManager.stopRacingAmbiance(); // Stop sounds when paused
             document.getElementById('pauseBtn').disabled = true;
             document.getElementById('resumeBtn').disabled = false;
             document.getElementById('raceStatus').textContent = 'Paused';
@@ -872,6 +1026,7 @@ class Game {
             this.racePaused = false;
             const pauseDuration = Date.now() - this.pausedTime;
             this.startTime += pauseDuration;
+            this.soundManager.startRacingAmbiance(); // Resume sounds when resumed
             document.getElementById('pauseBtn').disabled = false;
             document.getElementById('resumeBtn').disabled = true;
             document.getElementById('raceStatus').textContent = 'Racing!';
@@ -1070,6 +1225,9 @@ class Game {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
         }
+
+        // Stop racing sounds
+        this.soundManager.stopRacingAmbiance();
 
         this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
         const winner = this.rankings[0];
