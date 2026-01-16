@@ -1081,7 +1081,7 @@ class Game {
             let cameraSpeed;
             
             if (distanceToFinish <= 500) {
-                // When within 500px of finish, move camera to center the finish line
+                // When within 1000px of finish, move camera to center the finish line
                 targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
                 // Allow camera to move beyond normal max to center the finish line
                 cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
