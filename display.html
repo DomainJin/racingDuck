@@ -342,18 +342,43 @@
             console.log('📤 Sent DISPLAY_READY message');
         });
         function handleStartRace(data) {
-            console.log('Display: START_RACE received', data);
+            console.log('🏁 Display: START_RACE received', data);
             
-            // Icons should already be loaded since display loads them on open
-            // Just start the race immediately
-            console.log('Display: Icons already loaded, starting race immediately');
-            startRaceWithData(data);
+            try {
+                // Icons should already be loaded since display loads them on open
+                console.log('Display: Icons already loaded, starting race immediately');
+                startRaceWithData(data);
+            } catch (error) {
+                console.error('❌ Display: Error in handleStartRace:', error);
+                console.error('Error stack:', error.stack);
+                // Show error on screen
+                const loadingEl = document.getElementById('loadingDisplay');
+                if (loadingEl) {
+                    loadingEl.style.display = 'block';
+                    loadingEl.innerHTML = `
+                        <h1 style="color: #f00;">❌ Error Starting Race</h1>
+                        <p style="color: #fff;">${error.message}</p>
+                        <p style="color: #888; font-size: 14px;">Check console for details</p>
+                    `;
+                }
+            }
         }
         
         function startRaceWithData(data) {
             const { duckCount, raceDuration, theme, duckNames, duckImages, startTime } = data;
             
-            console.log('Display: startRaceWithData called with:', { duckCount, raceDuration, theme });
+            console.log('🎮 Display: startRaceWithData called with:', { duckCount, raceDuration, theme, duckNamesCount: duckNames?.length });
+            
+            // Verify displayGame exists
+            if (!displayGame) {
+                console.error('❌ displayGame is null! Cannot start race.');
+                return;
+            }
+            
+            console.log('✅ displayGame exists:', displayGame);
+            console.log('   - imagesLoaded:', displayGame.imagesLoaded);
+            console.log('   - iconCount:', displayGame.iconCount);
+            console.log('   - isDisplayMode:', displayGame.isDisplayMode);
             
             // Close victory popup if still open from previous race
             if (displayGame) {
@@ -404,10 +429,22 @@
             }
             
             console.log('Display: Setting up race with', duckCount, 'ducks');
-            displayGame.setupRace();
+            try {
+                displayGame.setupRace();
+                console.log('✅ Display: setupRace() completed successfully');
+            } catch (error) {
+                console.error('❌ Display: Error in setupRace():', error);
+                throw error;
+            }
             
             console.log('Display: Beginning race');
-            displayGame.beginRace();
+            try {
+                displayGame.beginRace();
+                console.log('✅ Display: beginRace() completed successfully');
+            } catch (error) {
+                console.error('❌ Display: Error in beginRace():', error);
+                throw error;
+            }
         }
         
         function handleRaceUpdate(data) {
@@ -481,23 +518,18 @@
                     displayGame.trackContainer.innerHTML = '';
                 }
                 
-                // Hide race elements and show loading
-                const loadingEl = document.getElementById('loadingDisplay');
-                if (loadingEl) {
-                    loadingEl.classList.remove('hidden');
-                    loadingEl.innerHTML = `
-                        <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
-                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for next race...</p>
-                        <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
-                    `;
-                }
+                // DON'T show loading screen - just hide race elements
+                // Loading screen will cause flashing issue
+                // Race track will be shown again when START_RACE is received
                 
                 // Hide timer and finish line
                 const bigTimer = document.getElementById('bigTimer');
                 const finishLine = document.getElementById('finishLine');
+                const victoryPopup = document.getElementById('victoryPopup');
                 
                 if (bigTimer) bigTimer.classList.add('hidden');
                 if (finishLine) finishLine.classList.add('hidden');
+                if (victoryPopup) victoryPopup.classList.add('hidden');
                 
                 console.log('✅ Display reset complete, ready for next race');
             }
