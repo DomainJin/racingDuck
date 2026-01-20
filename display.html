@@ -179,27 +179,47 @@
             console.log('BroadcastChannel created');
             
             try {
-                // Create game instance for display
-                console.log('Creating Game instance...');
-                displayGame = new Game();
-                console.log('Game instance created');
+                // Create game instance for display with isDisplayMode=true
+                console.log('Creating Game instance in display mode...');
+                displayGame = new Game(true); // Pass true for isDisplayMode
+                console.log('Game instance created, isDisplayMode:', displayGame.isDisplayMode);
                 
-                displayGame.isDisplayMode = true;
-                console.log('Display game created, isDisplayMode:', displayGame.isDisplayMode);
+                // Load icons immediately when display opens
+                console.log('Display mode: Loading icons immediately...');
                 
-                // Don't load images yet - wait for START_RACE
-                console.log('Display mode: Ready to receive race data');
-                
-                // Update loading display - ready but no icons loaded yet
+                // Update loading display
                 const loadingEl = document.getElementById('loadingDisplay');
                 if (loadingEl) {
                     loadingEl.innerHTML = `
-                        <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
-                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for race to start...</p>
-                        <p style="color: #888; font-size: 18px; margin-top: 10px;">Icons will load automatically when race starts</p>
-                        <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
+                        <h1 style="color: #FFD700; text-shadow: 0 0 20px #FFD700;">⏳ Loading Icons...</h1>
+                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Race starting soon...</p>
+                        <p style="color: #888; font-size: 16px; margin-top: 10px;">Loading animated ducks...</p>
                     `;
                 }
+                
+                // Icons will be loaded automatically by constructor
+                // Wait for them to finish loading
+                const checkIconsLoaded = setInterval(() => {
+                    if (displayGame.imagesLoaded) {
+                        clearInterval(checkIconsLoaded);
+                        console.log('✅ Display icons loaded, notifying control panel');
+                        
+                        // Update loading display
+                        if (loadingEl) {
+                            loadingEl.innerHTML = `
+                                <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
+                                <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for race to start...</p>
+                                <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
+                            `;
+                        }
+                        
+                        // Send message to control that icons are loaded
+                        displayChannel.postMessage({
+                            type: 'DISPLAY_ICONS_LOADED',
+                            data: {}
+                        });
+                    }
+                }, 100);
             } catch (error) {
                 console.error('❌ ERROR creating Game instance:', error);
                 console.error('Error stack:', error.stack);

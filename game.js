@@ -340,7 +340,10 @@ console.log('Classes loaded successfully');
 
 // Game class with all features
 class Game {
-    constructor() {
+    constructor(isDisplayMode = false) {
+        // Set display mode FIRST before any other initialization
+        this.isDisplayMode = isDisplayMode;
+        
         this.ducks = [];
         this.duckCount = 300;
         this.raceDuration = 30;
@@ -390,6 +393,7 @@ class Game {
         this.duckImages = []; // Mỗi phần tử sẽ là array 3 ảnh [frame1, frame2, frame3]
         this.iconCount = 44; // output_3 có 44 folders
         this.imagesLoaded = false;
+        this.displayIconsLoaded = false; // Track if display has loaded icons
         this.currentTheme = 'output_3'; // Sử dụng output_3
         
         this.currentTab = 'settings'; // Track current tab
@@ -397,13 +401,17 @@ class Game {
         // Display window management
         this.displayWindow = null;
         this.displayChannel = new BroadcastChannel('race_display');
-        this.isDisplayMode = false; // Flag for display-only mode
+        // isDisplayMode already set in constructor parameter
         
         // Listen for display ready and race finish
         this.displayChannel.onmessage = (event) => {
             const { type, data } = event.data;
             if (type === 'DISPLAY_READY') {
                 console.log('Display window is ready');
+            } else if (type === 'DISPLAY_ICONS_LOADED') {
+                console.log('✅ Display icons loaded successfully');
+                this.displayIconsLoaded = true;
+                this.checkBothIconsLoaded();
             } else if (type === 'DISPLAY_RACE_FINISHED') {
                 // Display has detected winner and sent it back
                 console.log('✅ Received DISPLAY_RACE_FINISHED from display');
@@ -415,12 +423,23 @@ class Game {
         this.updateHistoryWin(); // Load history from localStorage
         
         // Only detect themes and load images if NOT in display mode
-        // Display mode will have these set later via message
+        // Display mode will load icons immediately to be ready
         if (!this.isDisplayMode) {
             this.detectAvailableThemes();
             this.detectAndLoadDuckImages();
         } else {
-            console.log('Display mode: Skipping initial icon loading, will load on demand');
+            console.log('Display mode: Loading icons immediately...');
+            this.detectAndLoadDuckImages();
+        }
+    }
+    
+    checkBothIconsLoaded() {
+        // Only enable Start Race if both control and display have loaded icons
+        if (this.imagesLoaded && this.displayIconsLoaded) {
+            console.log('✅ Both control and display icons loaded - enabling Start Race');
+            this.enableStartButton();
+        } else {
+            console.log('⏳ Waiting for icons... Control:', this.imagesLoaded, 'Display:', this.displayIconsLoaded);
         }
     }
     
@@ -613,6 +632,14 @@ class Game {
     }
 
     enableStartButton() {
+        // Only enable if display window is open and has loaded icons
+        if (!this.isDisplayMode && this.displayWindow && !this.displayWindow.closed) {
+            if (!this.displayIconsLoaded) {
+                console.log('⏳ Display icons not loaded yet, waiting...');
+                return;
+            }
+        }
+        
         // Enable both Start Race buttons
         const startBtn = document.getElementById('startRaceBtn');
         const controlStartBtn = document.getElementById('controlStartBtn');
