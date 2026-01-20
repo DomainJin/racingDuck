@@ -474,14 +474,24 @@ class Game {
         const width = screen.width;
         const height = screen.height;
         
+        // Use absolute URL to ensure it works on deployed sites
+        const currentUrl = window.location.href;
+        const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+        const displayUrl = baseUrl + 'display.html';
+        
+        console.log('Opening display window with URL:', displayUrl);
+        
         this.displayWindow = window.open(
-            'display.html',
+            displayUrl,
             'RaceDisplay',
             `width=${width},height=${height},left=0,top=0,menubar=no,toolbar=no,location=no,status=no`
         );
         
         if (this.displayWindow) {
             console.log('Display window opened successfully');
+            
+            // Reset display loaded flag when opening new window
+            this.displayIconsLoaded = false;
             
             // Try to move to second screen if available
             if (window.screen.availLeft !== undefined) {
