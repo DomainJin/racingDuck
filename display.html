@@ -235,10 +235,13 @@
                             if (!ackReceived && retryCount < maxRetries) {
                                 displayChannel.postMessage({
                                     type: 'DISPLAY_ICONS_LOADED',
-                                    data: {}
+                                    data: {
+                                        iconCount: displayGame.iconCount,
+                                        imagesLoaded: displayGame.imagesLoaded
+                                    }
                                 });
                                 retryCount++;
-                                console.log(`Sent DISPLAY_ICONS_LOADED to control panel (attempt ${retryCount}/${maxRetries})`);
+                                console.log(`📤 Sent DISPLAY_ICONS_LOADED (${displayGame.iconCount} icons) - attempt ${retryCount}/${maxRetries}`);
                                 
                                 if (retryCount < maxRetries) {
                                     setTimeout(sendIconsLoaded, 500); // Retry every 500ms
@@ -246,9 +249,10 @@
                             }
                         };
                         
-                        // Listen for acknowledgment
+                        // Listen for acknowledgment and other messages
                         displayChannel.onmessage = (event) => {
                             const { type } = event.data;
+                            
                             if (type === 'CONTROL_ICONS_ACK') {
                                 ackReceived = true;
                                 console.log('✅ Control acknowledged icon load - stopping retry');
@@ -308,12 +312,17 @@
                     case 'REQUEST_ICONS_STATUS':
                         // Control is requesting icon status - reply immediately
                         console.log('📨 Control requesting icon status, replying...');
-                        if (displayGame && displayGame.imagesLoaded) {
+                        if (displayGame && displayGame.imagesLoaded && displayGame.iconCount > 0) {
                             displayChannel.postMessage({
                                 type: 'DISPLAY_ICONS_LOADED',
-                                data: {}
+                                data: {
+                                    iconCount: displayGame.iconCount,
+                                    imagesLoaded: displayGame.imagesLoaded
+                                }
                             });
-                            console.log('Replied with DISPLAY_ICONS_LOADED');
+                            console.log('📤 Replied with DISPLAY_ICONS_LOADED -', displayGame.iconCount, 'icons');
+                        } else {
+                            console.log('⏳ Icons not ready yet, cannot reply. Loaded:', displayGame?.imagesLoaded, 'Count:', displayGame?.iconCount);
                         }
                         break;
                     default:
@@ -321,11 +330,13 @@
                 }
             }
             
-            // Send ready message
-            displayChannel.postMessage({ type: 'DISPLAY_READY' });
-            console.log('Sent DISPLAY_READY message');
+            // Send ready message with sessionId
+            displayChannel.postMe
+            displayChannel.postMessage({ 
+                type: 'DISPLAY_READY'
+            });
+            console.log('📤 Sent DISPLAY_READY message');
         });
-        
         function handleStartRace(data) {
             console.log('Display: START_RACE received', data);
             

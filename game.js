@@ -409,17 +409,27 @@ class Game {
             if (type === 'DISPLAY_READY') {
                 console.log('Display window is ready');
             } else if (type === 'DISPLAY_ICONS_LOADED') {
-                console.log('✅ Display icons loaded successfully');
+                const iconCount = data.iconCount || 0;
+                console.log('✅ Display icons loaded successfully -', iconCount, 'icons');
+                
+                // Only accept if display has actually loaded icons
+                if (iconCount === 0) {
+                    console.warn('⚠️ Display reported icons loaded but iconCount is 0 - ignoring');
+                    return;
+                }
+                
                 this.displayIconsLoaded = true;
                 // Send confirmation back to display to stop retry
                 this.displayChannel.postMessage({
                     type: 'CONTROL_ICONS_ACK',
                     data: {}
                 });
-                // Enable Start button now that display is ready
-                if (this.imagesLoaded) {
-                    console.log('✅ Both control and display icons ready - enabling Start button');
+                // Enable Start button ONLY if both control and display have loaded icons
+                if (this.imagesLoaded && this.iconCount > 0) {
+                    console.log('✅ Both control (' + this.iconCount + ') and display (' + iconCount + ') icons ready - enabling Start button');
                     this.enableStartButton();
+                } else {
+                    console.log('⏳ Control icons not ready yet. Control:', this.imagesLoaded, this.iconCount);
                 }
             } else if (type === 'DISPLAY_RACE_FINISHED') {
                 // Display has detected winner and sent it back
