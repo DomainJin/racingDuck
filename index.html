@@ -48,10 +48,16 @@
                 </label>
             </div>
             <div class="input-group">
-                <button class="btn btn-secondary" id="openDisplayBtn" onclick="game.openDisplayWindow()" style="width: 100%; margin-bottom: 10px;" disabled>
+                <a href="display.html" target="_blank" class="btn btn-secondary" id="openDisplayBtn" style="width: 100%; margin-bottom: 10px; text-align: center; text-decoration: none; display: inline-block; pointer-events: none; opacity: 0.5;">
                     ⏳ Loading Icons...
-                </button>
-                <small style="color: #888;">Open this on projector/TV for audience view</small>
+                </a>
+                <small style="color: #FFD700; font-weight: bold;">📺 How to use:</small><br>
+                <small style="color: #888;">
+                    1. Right-click the button above → "Open link in new tab"<br>
+                    2. Wait for display tab to load icons (shows "DISPLAY READY")<br>
+                    3. Come back here and click "Start Race"<br>
+                    4. Display tab will show the race automatically
+                </small>
             </div>
             <button class="btn btn-primary" id="startRaceBtn" onclick="game.startRace()" disabled>Loading...</button>
         </div>

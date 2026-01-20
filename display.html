@@ -122,8 +122,11 @@
         <!-- Loading Message -->
         <div class="loading-display" id="loadingDisplay">
             <h1>🏁 Racing Display 🏁</h1>
-            <p>Waiting for race to start...</p>
-            <p style="font-size: 18px; color: #888;">Configure race in the main control window</p>
+            <p style="font-size: 24px; margin-top: 20px;">⏳ Loading icons...</p>
+            <p style="font-size: 18px; color: #888; margin-top: 30px;">
+                📺 Keep this tab open for display<br>
+                🎮 Use the control tab to start race
+            </p>
         </div>
         
         <!-- No race info on display - all controls are on index.html -->
@@ -222,8 +225,18 @@
                         if (loadingEl) {
                             loadingEl.innerHTML = `
                                 <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
-                                <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for race to start...</p>
-                                <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
+                                <p style="color: #fff; font-size: 28px; margin-top: 20px; font-weight: bold;">
+                                    ${displayGame.iconCount} icons loaded
+                                </p>
+                                <p style="color: #fff; font-size: 20px; margin-top: 30px;">
+                                    Waiting for race to start...
+                                </p>
+                                <p style="color: #0f0; font-size: 18px; margin-top: 20px;">
+                                    👉 Go to control tab and click "Start Race"
+                                </p>
+                                <p style="color: #888; font-size: 14px; margin-top: 30px;">
+                                    💡 TIP: Press F11 for fullscreen
+                                </p>
                             `;
                         }
                         

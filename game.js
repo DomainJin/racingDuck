@@ -398,9 +398,8 @@ class Game {
         
         this.currentTab = 'settings'; // Track current tab
         
-        // Display window management
-        this.displayWindow = null;
-        this.displayReady = false; // Track if display window is ready to receive messages
+        // Display tab management (user opens display.html manually in new tab)
+        this.displayReady = false; // Track if display tab is ready to receive messages
         this.displayChannel = new BroadcastChannel('race_display');
         // isDisplayMode already set in constructor parameter
         
@@ -499,81 +498,10 @@ class Game {
         this.currentTab = tabName;
     }
     
-    openDisplayWindow() {
-        // Open display window for secondary screen
-        const width = screen.width;
-        const height = screen.height;
-        
-        // Use absolute URL to ensure it works on deployed sites
-        const currentUrl = window.location.href;
-        const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
-        const displayUrl = baseUrl + 'display.html';
-        
-        console.log('Opening display window with URL:', displayUrl);
-        
-        this.displayWindow = window.open(
-            displayUrl,
-            'RaceDisplay',
-            `width=${width},height=${height},left=0,top=0,menubar=no,toolbar=no,location=no,status=no`
-        );
-        
-        if (this.displayWindow) {
-            console.log('Display window opened successfully');
-            
-            // Reset display loaded flag when opening new window
-            this.displayIconsLoaded = false;
-            this.displayReady = false; // Reset ready state for new window
-            
-            // Disable Start button temporarily until display loads icons
-            this.disableStartButton();
-            safeElementAction('openDisplayBtn', el => {
-                el.textContent = '⏳ Display is loading icons...';
-                el.disabled = true;
-            });
-            
-            // Request display icon status after window opens
-            setTimeout(() => {
-                console.log('Requesting display icon status...');
-                this.displayChannel.postMessage({
-                    type: 'REQUEST_ICONS_STATUS',
-                    data: {}
-                });
-            }, 1000);
-            
-            // Try to move to second screen if available
-            if (window.screen.availLeft !== undefined) {
-                this.displayWindow.moveTo(window.screen.availLeft + window.screen.width, 0);
-            }
-            
-            // Request fullscreen after window opens
-            setTimeout(() => {
-                if (this.displayWindow && this.displayWindow.document) {
-                    this.displayWindow.document.documentElement.requestFullscreen().catch(err => {
-                        console.log('Fullscreen request failed:', err);
-                    });
-                }
-            }, 500);
-            
-            // Test if window is still open
-            const checkWindow = setInterval(() => {
-                if (this.displayWindow && this.displayWindow.closed) {
-                    console.log('Display window was closed');
-                    clearInterval(checkWindow);
-                    this.displayWindow = null;
-                    this.displayIconsLoaded = false;
-                    this.displayReady = false;
-                    // Re-enable Start button for local mode
-                    if (this.imagesLoaded) {
-                        this.enableStartButton();
-                    }
-                }
-            }, 1000);
-            
-            alert('Display window opened! Move it to your secondary screen/projector.\n\nMake sure to keep it open before starting the race.');
-        } else {
-            alert('Failed to open display window. Please check popup blocker settings and allow popups for this site.');
-        }
-    }
+    // DEPRECATED: openDisplayWindow() - Display is now opened manually by user in new tab
+    // openDisplayWindow() {
+    //     ... (code kept for reference but not used)
+    // }
 
     loadStats() {
         const saved = localStorage.getItem('duckRaceStats');
@@ -716,11 +644,12 @@ class Game {
             controlStartBtn.textContent = '🚀 Start';
         }
         
-        // Enable Display Window button
+        // Enable Display link
         const displayBtn = document.getElementById('openDisplayBtn');
         if (displayBtn) {
-            displayBtn.disabled = false;
-            displayBtn.textContent = '🖥️ Open Display Window (Secondary Screen)';
+            displayBtn.style.pointerEvents = 'auto';
+            displayBtn.style.opacity = '1';
+            displayBtn.textContent = '🖥️ Open Display (Right-click → New Tab)';
         }
         
         // Show success notification only if loading container exists (not in display mode)
@@ -734,8 +663,17 @@ class Game {
 
     disableStartButton() {
         const startBtn = document.getElementById('startRaceBtn');
-        startBtn.disabled = true;
-        startBtn.textContent = 'Loading...';
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Loading...';
+        }
+        
+        const displayBtn = document.getElementById('openDisplayBtn');
+        if (displayBtn) {
+            displayBtn.style.pointerEvents = 'none';
+            displayBtn.style.opacity = '0.5';
+            displayBtn.textContent = '⏳ Loading Icons...';
+        }
     }
 
     detectAndLoadDuckImages() {
@@ -1012,36 +950,14 @@ class Game {
         // Check if images are loaded
         if (!this.imagesLoaded) {
             console.warn('Cannot start race - images not loaded yet');
+            alert('Icons are still loading. Please wait a moment.');
             return;
         }
         
         console.log('startRace: Starting race setup');
         
-        // Reload display window to reset all parameters
-        if (this.displayWindow && !this.displayWindow.closed) {
-            console.log('Reloading display window to reset parameters...');
-            this.displayWindow.location.reload();
-            
-            // Wait for display to reload before sending race data
-            setTimeout(() => {
-                console.log('Display reloaded, starting race...');
-                this.proceedWithRaceStart();
-            }, 1500);
-            return;
-        }
-        
-        // Silently open display window if not already open
-        if (!this.displayWindow || this.displayWindow.closed) {
-            console.log('Opening display window automatically...');
-            this.openDisplayWindow();
-            
-            // Wait for display to load before starting
-            setTimeout(() => {
-                this.proceedWithRaceStart();
-            }, 1500);
-            return;
-        }
-        
+        // NEW: User opens display manually in separate tab
+        // Just proceed with race start
         this.proceedWithRaceStart();
     }
     
@@ -1075,9 +991,9 @@ class Game {
             }, 1900); // 3s countdown + 100ms buffer
         }
         
-        // Send start message to display window
-        if (this.displayChannel && (!this.displayWindow || this.displayReady)) {
-            console.log('startRace: Sending START_RACE message to display');
+        // Send start message to display tab
+        if (this.displayChannel) {
+            console.log('startRace: Sending START_RACE message to display tab');
             
             const raceData = {
                 duckCount: this.duckCount,
@@ -1095,21 +1011,8 @@ class Game {
             });
             
             console.log('START_RACE message posted to channel');
-            
-            // Show confirmation
-            setTimeout(() => {
-                if (this.displayWindow && !this.displayWindow.closed) {
-                    console.log('✅ Race started successfully on display!');
-                } else {
-                    console.warn('⚠️ Display window may have been closed');
-                }
-            }, 500);
+            console.log('✅ Message sent to display tab (if open)');
         } else {
-            if (!this.displayReady && this.displayWindow && !this.displayWindow.closed) {
-                console.error('❌ Display window opened but NOT READY yet! Please wait...');
-                alert('Display window is still loading. Please wait a moment and try again.');
-                return;
-            }
             console.warn('startRace: displayChannel not available');
         }
     }
