@@ -226,12 +226,39 @@
                             `;
                         }
                         
-                        // Send message to control that icons are loaded
-                        displayChannel.postMessage({
-                            type: 'DISPLAY_ICONS_LOADED',
-                            data: {}
-                        });
-                        console.log('Sent DISPLAY_ICONS_LOADED to control panel');
+                        // Send message to control that icons are loaded with retry
+                        let retryCount = 0;
+                        let ackReceived = false;
+                        const maxRetries = 10;
+                        
+                        const sendIconsLoaded = () => {
+                            if (!ackReceived && retryCount < maxRetries) {
+                                displayChannel.postMessage({
+                                    type: 'DISPLAY_ICONS_LOADED',
+                                    data: {}
+                                });
+                                retryCount++;
+                                console.log(`Sent DISPLAY_ICONS_LOADED to control panel (attempt ${retryCount}/${maxRetries})`);
+                                
+                                if (retryCount < maxRetries) {
+                                    setTimeout(sendIconsLoaded, 500); // Retry every 500ms
+                                }
+                            }
+                        };
+                        
+                        // Listen for acknowledgment
+                        displayChannel.onmessage = (event) => {
+                            const { type } = event.data;
+                            if (type === 'CONTROL_ICONS_ACK') {
+                                ackReceived = true;
+                                console.log('✅ Control acknowledged icon load - stopping retry');
+                            }
+                            // Keep existing message handler
+                            handleDisplayMessage(event);
+                        };
+                        
+                        // Start sending
+                        sendIconsLoaded();
                     }
                 }, 100);
             } catch (error) {
@@ -247,8 +274,8 @@
             
             // Display is ready immediately - images will load on-demand when race starts
             
-            // Listen for messages from control window
-            displayChannel.onmessage = (event) => {
+            // Handle all display messages
+            function handleDisplayMessage(event) {
                 console.log('📨 Display received message:', event.data);
                 const { type, data } = event.data;
                 
@@ -278,10 +305,21 @@
                     case 'RESUME_RACE':
                         handleResumeRace(data);
                         break;
+                    case 'REQUEST_ICONS_STATUS':
+                        // Control is requesting icon status - reply immediately
+                        console.log('📨 Control requesting icon status, replying...');
+                        if (displayGame && displayGame.imagesLoaded) {
+                            displayChannel.postMessage({
+                                type: 'DISPLAY_ICONS_LOADED',
+                                data: {}
+                            });
+                            console.log('Replied with DISPLAY_ICONS_LOADED');
+                        }
+                        break;
                     default:
                         console.log('Unknown message type:', type);
                 }
-            };
+            }
             
             // Send ready message
             displayChannel.postMessage({ type: 'DISPLAY_READY' });

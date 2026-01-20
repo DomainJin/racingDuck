@@ -411,6 +411,11 @@ class Game {
             } else if (type === 'DISPLAY_ICONS_LOADED') {
                 console.log('✅ Display icons loaded successfully');
                 this.displayIconsLoaded = true;
+                // Send confirmation back to display to stop retry
+                this.displayChannel.postMessage({
+                    type: 'CONTROL_ICONS_ACK',
+                    data: {}
+                });
                 // Enable Start button now that display is ready
                 if (this.imagesLoaded) {
                     console.log('✅ Both control and display icons ready - enabling Start button');
@@ -422,6 +427,15 @@ class Game {
                 this.handleDisplayRaceFinished(data);
             }
         };
+        
+        // Request display status after listener is ready (in case display opened before control)
+        setTimeout(() => {
+            console.log('Control ready - requesting display icon status...');
+            this.displayChannel.postMessage({
+                type: 'REQUEST_ICONS_STATUS',
+                data: {}
+            });
+        }, 500);
         
         // this.updateStatsDisplay(); // Stats panel removed
         this.updateHistoryWin(); // Load history from localStorage
@@ -503,6 +517,15 @@ class Game {
                 el.textContent = '⏳ Display is loading icons...';
                 el.disabled = true;
             });
+            
+            // Request display icon status after window opens
+            setTimeout(() => {
+                console.log('Requesting display icon status...');
+                this.displayChannel.postMessage({
+                    type: 'REQUEST_ICONS_STATUS',
+                    data: {}
+                });
+            }, 1000);
             
             // Try to move to second screen if available
             if (window.screen.availLeft !== undefined) {
