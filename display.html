@@ -300,6 +300,8 @@
         function startRaceWithData(data) {
             const { duckCount, raceDuration, theme, duckNames, duckImages, startTime } = data;
             
+            console.log('Display: startRaceWithData called with:', { duckCount, raceDuration, theme });
+            
             // Close victory popup if still open from previous race
             if (displayGame) {
                 displayGame.closeVictoryPopup();
@@ -311,9 +313,14 @@
                 console.log('Display: Reset timing variables for new race');
             }
             
-            // Hide loading display
+            // CRITICAL: Hide loading display with style.display instead of class
             const loadingEl = document.getElementById('loadingDisplay');
-            if (loadingEl) loadingEl.classList.add('hidden');
+            if (loadingEl) {
+                console.log('Display: Hiding loading screen');
+                loadingEl.style.display = 'none';
+            } else {
+                console.error('Display: loadingDisplay element not found!');
+            }
             
             // Show race elements (only big timer and race track on display)
             const bigTimer = document.getElementById('bigTimer');
@@ -322,8 +329,18 @@
                 const timerDisplay = bigTimer.querySelector('.timer-display');
                 if (timerDisplay) timerDisplay.textContent = '00:00:00';
                 bigTimer.classList.remove('hidden');
+                console.log('Display: Big timer shown');
             }
-            // raceTrack is already visible
+            
+            // Ensure race track is visible
+            const raceTrack = document.getElementById('raceTrack');
+            if (raceTrack) {
+                raceTrack.classList.remove('hidden');
+                raceTrack.style.display = 'block';
+                console.log('Display: Race track shown');
+            } else {
+                console.error('Display: raceTrack element not found!');
+            }
             
             // Initialize race
             displayGame.duckCount = duckCount;
