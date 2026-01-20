@@ -2347,7 +2347,7 @@ class Game {
 
         console.log('📤 Sending results to display...');
         
-        // Send SHOW_RESULTS message to display
+        // Send SHOW_RESULTS message with data
         this.displayChannel.postMessage({
             type: 'SHOW_RESULTS',
             data: {

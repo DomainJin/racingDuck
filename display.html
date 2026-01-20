@@ -22,14 +22,22 @@
             left: 0;
         }
         
-        /* Hide all controls on display */
+        /* Hide all controls on display except result-panel */
         .control-panel,
         .settings-panel,
         .history-win,
-        .result-panel,
         .history-panel,
         .race-info {
             display: none !important;
+        }
+        
+        /* Allow result-panel to show on display */
+        .result-panel {
+            display: none; /* hidden by default */
+        }
+        
+        .result-panel.fullscreen {
+            display: flex !important;
         }
         
         /* Race info at top */
@@ -153,6 +161,12 @@
             </div>
             <div class="bank-bot" id="bankBot"></div>
             <div class="finish-line hidden" id="finishLine">FINISH</div>
+        </div>
+        
+        <!-- Result Panel (copy from index.html) -->
+        <div class="result-panel hidden" id="resultPanel">
+            <h2 id="resultTitle">Results</h2>
+            <div id="resultMessage"></div>
         </div>
     </div>
 
@@ -568,10 +582,8 @@
         function handleShowResults(data) {
             console.log('📊 Display: SHOW_RESULTS received', data);
             
-            const { winners, totalRaces } = data;
-            
-            if (!winners || winners.length === 0) {
-                console.warn('No winners data received');
+            if (!data || !displayGame) {
+                console.warn('No data or displayGame not ready');
                 return;
             }
 
@@ -587,33 +599,37 @@
                 raceTrack.style.display = 'none';
             }
 
-            // Create results display
-            let resultsContainer = document.getElementById('displayResultsContainer');
-            if (!resultsContainer) {
-                // Create container if doesn't exist
-                resultsContainer = document.createElement('div');
-                resultsContainer.id = 'displayResultsContainer';
-                resultsContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; color: white; font-family: Arial, sans-serif; overflow-y: auto;';
-                document.body.appendChild(resultsContainer);
+            // Hide victory popup
+            const victoryPopup = document.getElementById('victoryPopup');
+            if (victoryPopup) {
+                victoryPopup.classList.add('hidden');
             }
 
-            // Build HTML
-            let html = '<div style="text-align: center; padding: 40px;"><h1 style="font-size: 72px; margin: 0 0 20px 0; text-shadow: 0 4px 20px rgba(0,0,0,0.3);">🏆 PRIZE RESULTS 🏆</h1><p style="font-size: 32px; margin-bottom: 60px; opacity: 0.9;">Total Races: ' + totalRaces + '</p><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1400px; margin: 0 auto;">';
+            // Update displayGame data
+            if (data.winners) {
+                displayGame.winners = data.winners;
+            }
+            if (data.totalRaces !== undefined) {
+                displayGame.stats.totalRaces = data.totalRaces;
+            }
 
-            winners.forEach((winner, index) => {
-                const medals = ['🥇', '🥈', '🥉'];
-                const medal = index < 3 ? medals[index] : '🏅';
-                const bgColors = ['linear-gradient(135deg, #FFD700 0%, #FFA500 100%)', 'linear-gradient(135deg, #C0C0C0 0%, #808080 100%)', 'linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)', 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'];
-                const bgColor = index < 3 ? bgColors[index] : bgColors[3];
-
-                html += '<div style="background: ' + bgColor + '; border-radius: 20px; padding: 30px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);"><div style="font-size: 80px; margin-bottom: 10px;">' + medal + '</div><div style="font-size: 36px; font-weight: bold; margin-bottom: 10px;">Prize ' + winner.position + '</div><div style="font-size: 28px; margin-bottom: 15px; word-break: break-word;">' + winner.name + '</div><div style="width: 60px; height: 60px; background: ' + winner.color + '; border-radius: 50%; margin: 15px auto; border: 4px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.2);"></div><div style="font-size: 18px; opacity: 0.9;">Race #' + winner.raceNumber + '</div></div>';
-            });
-
-            html += '</div><p style="font-size: 24px; margin-top: 60px; opacity: 0.8;">🎉 Congratulations to all winners! 🎉</p></div>';
-
-            resultsContainer.innerHTML = html;
+            // Update result panel UI using displayGame method
+            displayGame.showWinnersPanel();
             
-            console.log('✅ Results displayed on screen');
+            // Get result panel and make fullscreen
+            const resultPanel = document.getElementById('resultPanel');
+            if (resultPanel) {
+                resultPanel.classList.remove('hidden');
+                resultPanel.classList.add('fullscreen');
+                
+                // Hide all buttons on display
+                const buttons = resultPanel.querySelectorAll('button');
+                buttons.forEach(btn => {
+                    btn.style.display = 'none';
+                });
+                
+                console.log('✅ Results displayed in fullscreen');
+            }
         }
     </script>
 </body>
