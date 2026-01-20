@@ -4,22 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> The Lucky Racer </title>
-    <link rel="stylesheet" href="style.css?v=41">
+    <link rel="stylesheet" href="style.css?v=43">
 </head>
 <body>
+    <!-- Remove tab navigation, keep single page -->
     <div class="container">
-        <h1> The Lucky Racer </h1>
-        
-        <!-- Loading Indicator -->
-        <div class="loading-container" id="loadingContainer">
-            <div class="loading-spinner"></div>
-            <div class="loading-text" id="loadingText">Loading icons...</div>
-            <div class="loading-progress" id="loadingProgress">0%</div>
-        </div>
-        
-        <!-- Statistics Panel -->
-        <!-- Game Settings -->
-        <div class="settings-panel" id="settingsPanel">
+            <h1> The Lucky Racer - Settings </h1>
+            
+            <!-- Loading Indicator -->
+            <div class="loading-container" id="loadingContainer">
+                <div class="loading-spinner"></div>
+                <div class="loading-text" id="loadingText">Loading icons...</div>
+                <div class="loading-progress" id="loadingProgress">0%</div>
+            </div>
+            
+            <!-- Game Settings -->
+            <div class="settings-panel" id="settingsPanel">
             <h2>Race Settings</h2>
             <div class="input-group">
                 <label for="duckCount">Number of Racers:</label>
@@ -47,11 +47,37 @@
                     <input type="checkbox" id="soundToggle" checked> Enable Sound
                 </label>
             </div>
+            <div class="input-group">
+                <button class="btn btn-secondary" id="openDisplayBtn" onclick="game.openDisplayWindow()" style="width: 100%; margin-bottom: 10px;" disabled>
+                    ⏳ Loading Icons...
+                </button>
+                <small style="color: #888;">Open this on projector/TV for audience view</small>
+            </div>
             <button class="btn btn-primary" id="startRaceBtn" onclick="game.startRace()" disabled>Loading...</button>
         </div>
 
-        <!-- Race Info -->
-        <div class="race-info hidden" id="raceInfo">
+        <!-- Leaderboard -->
+        <div class="history-win" id="historyWin">
+            <h3>🏆 Victory History</h3>
+            <div id="historyWinList"></div>
+            <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Restart (Clear History)</button>
+        </div>
+
+        <!-- Results -->
+        <div class="result-panel hidden" id="resultPanel">
+            <h2 id="resultTitle">Results</h2>
+            <div id="resultMessage"></div>
+        </div>
+
+        <!-- Race History -->
+        <div class="history-panel hidden" id="historyPanel">
+            <h2>📊 Race History</h2>
+            <div id="historyList"></div>
+            <button class="btn btn-primary" onclick="game.closeHistory()">Close</button>
+        </div>
+        
+        <!-- Race Info (for control window) -->
+        <div class="race-info hidden" id="raceInfo" style="margin-top: 20px; position: relative;">
             <div class="info-item">
                 <span class="label">Race:</span>
                 <span id="raceNumber" class="value">#1</span>
@@ -66,75 +92,40 @@
             </div>
         </div>
 
-        <!-- Control Panel -->
-        <div class="control-panel hidden" id="controlPanel">
+        <!-- Control Panel (for control window) -->
+        <div class="control-panel hidden" id="controlPanel" style="margin-top: 20px; position: relative; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button class="btn btn-small" onclick="game.goHome()" id="homeBtn">🏠 Home</button>
-            <button class="btn btn-small" onclick="game.toggleFullscreen()" id="fullscreenBtn">🔲 Fullscreen</button>
+            <button class="btn btn-small" onclick="game.startRace()" id="controlStartBtn" disabled>Loading...</button>
             <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Pause</button>
             <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Resume</button>
-            <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBtn">🎯 Continue Next Race</button>
+            <button class="btn btn-primary" onclick="game.continueRace()" id="continueBtn" style="display: none;">🎯 Next Race</button>
             <button class="btn btn-secondary" onclick="game.showWinnersPanel()" id="viewResultsBtn">📋 View Results</button>
         </div>
 
-        <!-- Main Content Area -->
-        <div class="race-container">
-            <!-- Hybrid Approach: DOM-based racing track -->
-            <div class="race-track hidden" id="raceTrack">
-                <!-- Big Timer Display -->
-                <div class="big-timer hidden" id="bigTimer">
-                    <div class="timer-display">00:00:00</div>
-                </div>
-                <div class="bank-top" id="bankTop"></div>
-                <div class="race-river" id="raceRiver">
-                    <div class="water-flow"></div>
-                    <div class="water-ripples"></div>
-                    <div class="fish-layer" id="fishLayer">
-                        <div class="fish fish-1">🐟</div>
-                        <div class="fish fish-2">🐠</div>
-                        <div class="fish fish-3">🐡</div>
-                        <div class="fish fish-4">🐟</div>
-                        <div class="fish fish-5">🐠</div>
-                    </div>
-                    <!-- Ducks will be added here dynamically -->
-                </div>
-                <div class="bank-bot" id="bankBot">
-                    <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBankBtn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 1000;">🎯 Continue Next Race</button>
-                </div>
-                <div class="finish-line hidden" id="finishLine">FINISH</div>
+        <!-- Race Track HIDDEN on control screen - only visible on display.html -->
+        <div class="race-track hidden" id="raceTrack" style="display: none !important;">
+            <div class="big-timer hidden" id="bigTimer">
+                <div class="timer-display">00:00:00</div>
             </div>
-
-
+            <div class="bank-top" id="bankTop"></div>
+            <div class="race-river" id="raceRiver">
+                <div class="water-flow"></div>
+                <div class="water-ripples"></div>
+                <div class="fish-layer" id="fishLayer">
+                    <div class="fish fish-1">🐟</div>
+                    <div class="fish fish-2">🐠</div>
+                    <div class="fish fish-3">🐡</div>
+                    <div class="fish fish-4">🐟</div>
+                    <div class="fish fish-5">🐠</div>
+                </div>
+                <!-- Ducks will be added here dynamically -->
+            </div>
+            <div class="bank-bot" id="bankBot">
+                <button class="btn btn-primary hidden" onclick="game.continueRace()" id="continueBankBtn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 1000;">🎯 Continue Next Race</button>
+            </div>
+            <div class="finish-line hidden" id="finishLine">FINISH</div>
         </div>
-
-        <!-- Leaderboard -->
-        <div class="history-win" id="historyWin">
-            <h3>🏆 Victory History</h3>
-            <div id="historyWinList"></div>
-            <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Restart (Clear History)</button>
-        </div>
-
-        <!-- Highlights Panel -->
-        <!-- <div class="highlights-panel hidden" id="highlightsPanel">
-            <h3>⚡ Highlights</h3>
-            <div id="highlightsList"></div>
-        </div> -->
-
-        <!-- Results -->
-        <div class="result-panel hidden" id="resultPanel">
-            <h2 id="resultTitle">Results</h2>
-            <div id="resultMessage"></div>
-            <!-- <div class="result-actions">
-                <button class="btn btn-primary" onclick="game.fullReset()">🔄 Play Again</button>
-                <button class="btn btn-secondary" onclick="game.viewHistory()">📜 View History</button>
-            </div> -->
-        </div>
-
-        <!-- Race History -->
-        <div class="history-panel hidden" id="historyPanel">
-            <h2>📊 Race History</h2>
-            <div id="historyList"></div>
-            <button class="btn btn-primary" onclick="game.closeHistory()">Close</button>
-        </div>
+    </div>
     </div>
 
     <!-- Victory Popup (outside container for max z-index) -->

@@ -4,6 +4,15 @@ const FINISH_LINE_OFFSET = 100;
 // Minimum participants required to start/continue a race
 const MINIMUM_PARTICIPANTS = 5;
 
+// Helper function to safely get element and perform action
+function safeElementAction(id, action) {
+    const element = document.getElementById(id);
+    if (element && action) {
+        action(element);
+    }
+    return element;
+}
+
 // Sound system
 class SoundManager {
     constructor() {
@@ -383,10 +392,105 @@ class Game {
         this.imagesLoaded = false;
         this.currentTheme = 'output_3'; // Sử dụng output_3
         
+        this.currentTab = 'settings'; // Track current tab
+        
+        // Display window management
+        this.displayWindow = null;
+        this.displayChannel = new BroadcastChannel('race_display');
+        this.isDisplayMode = false; // Flag for display-only mode
+        
+        // Listen for display ready and race finish
+        this.displayChannel.onmessage = (event) => {
+            const { type, data } = event.data;
+            if (type === 'DISPLAY_READY') {
+                console.log('Display window is ready');
+            } else if (type === 'DISPLAY_RACE_FINISHED') {
+                // Display has detected winner and sent it back
+                console.log('✅ Received DISPLAY_RACE_FINISHED from display');
+                this.handleDisplayRaceFinished(data);
+            }
+        };
+        
         // this.updateStatsDisplay(); // Stats panel removed
         this.updateHistoryWin(); // Load history from localStorage
-        this.detectAvailableThemes();
+        
+        // Only detect themes and load images if NOT in display mode
+        // Display mode will have these set later via message
+        if (!this.isDisplayMode) {
+            this.detectAvailableThemes();
+            this.detectAndLoadDuckImages();
+        } else {
+            console.log('Display mode: Skipping initial icon loading, will load on demand');
+        }
+    }
+    
+    initDisplayMode() {
+        // Called when START_RACE is received - load images on demand
+        console.log('initDisplayMode: Loading images for race...');
         this.detectAndLoadDuckImages();
+    }
+    
+    switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        if (tabName === 'settings') {
+            document.getElementById('settingsTab').classList.add('active');
+            document.getElementById('settingsTabContent').classList.add('active');
+        } else if (tabName === 'game') {
+            document.getElementById('gameTab').classList.add('active');
+            document.getElementById('gameTabContent').classList.add('active');
+        }
+        
+        this.currentTab = tabName;
+    }
+    
+    openDisplayWindow() {
+        // Open display window for secondary screen
+        const width = screen.width;
+        const height = screen.height;
+        
+        this.displayWindow = window.open(
+            'display.html',
+            'RaceDisplay',
+            `width=${width},height=${height},left=0,top=0,menubar=no,toolbar=no,location=no,status=no`
+        );
+        
+        if (this.displayWindow) {
+            console.log('Display window opened successfully');
+            
+            // Try to move to second screen if available
+            if (window.screen.availLeft !== undefined) {
+                this.displayWindow.moveTo(window.screen.availLeft + window.screen.width, 0);
+            }
+            
+            // Request fullscreen after window opens
+            setTimeout(() => {
+                if (this.displayWindow && this.displayWindow.document) {
+                    this.displayWindow.document.documentElement.requestFullscreen().catch(err => {
+                        console.log('Fullscreen request failed:', err);
+                    });
+                }
+            }, 500);
+            
+            // Test if window is still open
+            const checkWindow = setInterval(() => {
+                if (this.displayWindow && this.displayWindow.closed) {
+                    console.log('Display window was closed');
+                    clearInterval(checkWindow);
+                    this.displayWindow = null;
+                }
+            }, 1000);
+            
+            alert('Display window opened! Move it to your secondary screen/projector.\n\nMake sure to keep it open before starting the race.');
+        } else {
+            alert('Failed to open display window. Please check popup blocker settings and allow popups for this site.');
+        }
     }
 
     loadStats() {
@@ -433,6 +537,13 @@ class Game {
     detectAvailableThemes() {
         // Tự động phát hiện các thư mục output_X
         const themeSelect = document.getElementById('iconTheme');
+        
+        // Skip if element doesn't exist (display mode)
+        if (!themeSelect) {
+            console.log('iconTheme element not found, skipping theme detection');
+            return;
+        }
+        
         themeSelect.innerHTML = ''; // Xóa các option cũ
         
         let themeIndex = 1;
@@ -483,28 +594,44 @@ class Game {
         const loadingText = document.getElementById('loadingText');
         const loadingProgress = document.getElementById('loadingProgress');
         
-        loadingContainer.classList.remove('hidden');
-        loadingText.textContent = message;
-        loadingProgress.textContent = `${progress}%`;
+        if (loadingContainer) loadingContainer.classList.remove('hidden');
+        if (loadingText) loadingText.textContent = message;
+        if (loadingProgress) loadingProgress.textContent = `${progress}%`;
     }
 
     updateLoadingProgress(message, progress) {
         const loadingText = document.getElementById('loadingText');
         const loadingProgress = document.getElementById('loadingProgress');
         
-        loadingText.textContent = message;
-        loadingProgress.textContent = `${progress}%`;
+        if (loadingText) loadingText.textContent = message;
+        if (loadingProgress) loadingProgress.textContent = `${progress}%`;
     }
 
     hideLoading() {
         const loadingContainer = document.getElementById('loadingContainer');
-        loadingContainer.classList.add('hidden');
+        if (loadingContainer) loadingContainer.classList.add('hidden');
     }
 
     enableStartButton() {
+        // Enable both Start Race buttons
         const startBtn = document.getElementById('startRaceBtn');
-        startBtn.disabled = false;
-        startBtn.textContent = 'Start Race';
+        const controlStartBtn = document.getElementById('controlStartBtn');
+        
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 Start Race';
+        }
+        if (controlStartBtn) {
+            controlStartBtn.disabled = false;
+            controlStartBtn.textContent = '🚀 Start';
+        }
+        
+        // Enable Display Window button
+        const displayBtn = document.getElementById('openDisplayBtn');
+        if (displayBtn) {
+            displayBtn.disabled = false;
+            displayBtn.textContent = '🖥️ Open Display Window (Secondary Screen)';
+        }
         
         // Show success notification
         this.updateLoadingProgress('✓ All icons loaded successfully!', 100);
@@ -522,8 +649,16 @@ class Game {
     detectAndLoadDuckImages() {
         // Tự động detect số folder có sẵn trong theme
         console.log(`Starting icon detection for theme: ${this.currentTheme}`);
-        document.getElementById('iconCount').textContent = 'Detecting icons...';
-        this.showLoading('Detecting icons...', 0);
+        
+        const iconCountEl = document.getElementById('iconCount');
+        if (iconCountEl) {
+            iconCountEl.textContent = 'Detecting icons...';
+        }
+        
+        // Only show loading UI if element exists (not in display mode)
+        if (document.getElementById('loadingContainer')) {
+            this.showLoading('Detecting icons...', 0);
+        }
         
         const maxFolders = 50; // Kiểm tra tối đa 50 folders
         let detectedCount = 0;
@@ -562,13 +697,22 @@ class Game {
                     // Kết thúc detection
                     this.iconCount = detectedCount;
                     console.log(`Detection stopped at folder ${folderNum}. Total found: ${detectedCount}`);
-                    document.getElementById('iconCount').textContent = `${detectedCount} icons detected`;
+                    
+                    const iconCountEl = document.getElementById('iconCount');
+                    if (iconCountEl) {
+                        iconCountEl.textContent = `${detectedCount} icons detected`;
+                    }
+                    
                     if (detectedCount > 0) {
                         this.loadAllDuckImages();
                     } else {
                         console.error('No icons found! Check if files exist in:', this.currentTheme);
-                        this.hideLoading();
-                        alert('No icons found! Please check the icon theme.');
+                        if (document.getElementById('loadingContainer')) {
+                            this.hideLoading();
+                        }
+                        if (!this.isDisplayMode) {
+                            alert('No icons found! Please check the icon theme.');
+                        }
                     }
                 }
             };
@@ -609,7 +753,10 @@ class Game {
                         if (loadedFolders === totalFolders) {
                             this.imagesLoaded = true;
                             console.log(`Loaded ${totalFolders} duck animations (3 frames each) from ${this.currentTheme}!`);
-                            document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                            const iconCountEl = document.getElementById('iconCount');
+                            if (iconCountEl) {
+                                iconCountEl.textContent = `${totalFolders} icon (animated)`;
+                            }
                             this.hideLoading();
                             this.enableStartButton();
                         }
@@ -626,7 +773,10 @@ class Game {
                         
                         if (loadedFolders === totalFolders) {
                             this.imagesLoaded = true;
-                            document.getElementById('iconCount').textContent = `${totalFolders} icon (animated)`;
+                            const iconCountEl = document.getElementById('iconCount');
+                            if (iconCountEl) {
+                                iconCountEl.textContent = `${totalFolders} icon (animated)`;
+                            }
                             this.hideLoading();
                             this.enableStartButton();
                         }
@@ -640,7 +790,10 @@ class Game {
         }
         
         // Cập nhật UI ngay lập tức
-        document.getElementById('iconCount').textContent = `Loading ${totalFolders} animated ducks...`;
+        const iconCountEl = document.getElementById('iconCount');
+        if (iconCountEl) {
+            iconCountEl.textContent = `Loading ${totalFolders} animated ducks...`;
+        }
     }
 
     preloadDuckImages() {
@@ -766,17 +919,115 @@ class Game {
     startRace() {
         // Check if images are loaded
         if (!this.imagesLoaded) {
-            alert('Please wait for all icons to load before starting the race!');
+            console.warn('Cannot start race - images not loaded yet');
             return;
         }
         
-        this.setupRace();
+        console.log('startRace: Starting race setup');
+        
+        // Reload display window to reset all parameters
+        if (this.displayWindow && !this.displayWindow.closed) {
+            console.log('Reloading display window to reset parameters...');
+            this.displayWindow.location.reload();
+            
+            // Wait for display to reload before sending race data
+            setTimeout(() => {
+                console.log('Display reloaded, starting race...');
+                this.proceedWithRaceStart();
+            }, 1500);
+            return;
+        }
+        
+        // Silently open display window if not already open
+        if (!this.displayWindow || this.displayWindow.closed) {
+            console.log('Opening display window automatically...');
+            this.openDisplayWindow();
+            
+            // Wait for display to load before starting
+            setTimeout(() => {
+                this.proceedWithRaceStart();
+            }, 1500);
+            return;
+        }
+        
+        this.proceedWithRaceStart();
+    }
+    
+    proceedWithRaceStart() {
+        
+        // Don't switch tabs in control mode, keep settings visible
+        // this.switchTab('game');
+        
+        // In display mode, setup and run the race
+        if (this.isDisplayMode) {
+            this.setupRace();
+            // Display will auto-start via beginRace()
+            setTimeout(() => {
+                console.log('Display: Auto-starting race visualization');
+                this.beginRace();
+            }, 100);
+        } else {
+            // Control mode: Setup race for data tracking but DON'T run visualization
+            this.setupRace();
+            
+            // Wait for countdown duration (3-2-1-GO = 3 intervals * 600ms = 1800ms)
+            // This syncs with display countdown so timers match
+            setTimeout(() => {
+                console.log('Control panel: Starting race timing after countdown (no visualization)');
+                // Set start time AFTER countdown completes (same as display)
+                this.startTime = Date.now();
+                this.raceStarted = true;
+                
+                // Update timer on control panel only (no duck animation)
+                this.updateControlPanelTimer();
+            }, 1900); // 3s countdown + 100ms buffer
+        }
+        
+        // Send start message to display window
+        if (this.displayChannel) {
+            console.log('startRace: Sending START_RACE message to display');
+            
+            const raceData = {
+                duckCount: this.duckCount,
+                raceDuration: this.raceDuration,
+                theme: this.currentTheme,
+                duckNames: [...this.activeDuckNames], // Clone array
+                startTime: this.startTime // Send synchronized start time
+            };
+            
+            console.log('Race data to send:', raceData);
+            
+            this.displayChannel.postMessage({
+                type: 'START_RACE',
+                data: raceData
+            });
+            
+            console.log('START_RACE message posted to channel');
+            
+            // Show confirmation
+            setTimeout(() => {
+                if (this.displayWindow && !this.displayWindow.closed) {
+                    console.log('✅ Race started successfully on display!');
+                } else {
+                    console.warn('⚠️ Display window may have been closed');
+                }
+            }, 500);
+        } else {
+            console.warn('startRace: displayChannel not available');
+        }
     }
 
     setupRace() {
-        this.duckCount = parseInt(document.getElementById('duckCount').value);
-        this.raceDuration = parseInt(document.getElementById('raceDuration').value) || 10;
-        this.soundManager.setEnabled(document.getElementById('soundToggle').checked);
+        // In display mode, duckCount and raceDuration are already set via handleStartRace
+        if (!this.isDisplayMode) {
+            const duckCountEl = document.getElementById('duckCount');
+            const raceDurationEl = document.getElementById('raceDuration');
+            const soundToggleEl = document.getElementById('soundToggle');
+            
+            if (duckCountEl) this.duckCount = parseInt(duckCountEl.value);
+            if (raceDurationEl) this.raceDuration = parseInt(raceDurationEl.value) || 10;
+            if (soundToggleEl) this.soundManager.setEnabled(soundToggleEl.checked);
+        }
 
         if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
             alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 2000!`);
@@ -784,6 +1035,13 @@ class Game {
         }
 
         this.trackContainer = document.getElementById('raceRiver');
+        
+        if (!this.trackContainer) {
+            console.error('ERROR: raceRiver element not found!');
+            return;
+        }
+        
+        console.log('setupRace: trackContainer found', this.trackContainer);
         
         // Calculate viewport width dynamically based on track container
         const trackElement = document.getElementById('raceTrack');
@@ -822,10 +1080,16 @@ class Game {
         this.duckElements.clear();
 
         this.ducks = [];
+        
+        console.log('setupRace: Creating', this.duckCount, 'ducks');
+        
         // this.highlights = [];
         
         // Ẩn finish line từ race trước
-        document.getElementById('finishLine').classList.add('hidden');
+        const finishLineEl = document.getElementById('finishLine');
+        if (finishLineEl) {
+            finishLineEl.classList.add('hidden');
+        }
         
         // Khởi tạo activeDuckNames nếu chưa có
         if (this.activeDuckNames.length === 0) {
@@ -864,32 +1128,81 @@ class Game {
             duck.randomizeSpeed();
             this.ducks.push(duck);
             
+            console.log(`Created duck ${i}/${this.duckCount}: ${duckName}`);
+            
             // Don't create elements upfront for performance - they'll be created lazily when visible
             // this.createDuckElement(duck, i);
         }
+        
+        console.log('setupRace: Total ducks created:', this.ducks.length);
 
-        document.getElementById('settingsPanel').classList.add('hidden');
-        document.getElementById('raceInfo').classList.remove('hidden');
-        document.getElementById('controlPanel').classList.remove('hidden');
-        document.getElementById('raceTrack').classList.remove('hidden');
-        // document.getElementById('highlightsPanel').classList.remove('hidden');
-        document.getElementById('bigTimer').classList.remove('hidden');
-
+        // Only hide settings panel if in control mode and element exists
+        const settingsPanel = document.getElementById('settingsPanel');
+        if (settingsPanel && !this.isDisplayMode) {
+            settingsPanel.classList.add('hidden');
+        }
+        
+        // In control mode, DON'T show race track - only show controls
+        // Race will only display on the secondary display window
+        if (!this.isDisplayMode) {
+            // Show only controls for operator
+            const raceInfo = document.getElementById('raceInfo');
+            const controlPanel = document.getElementById('controlPanel');
+            if (raceInfo) raceInfo.classList.remove('hidden');
+            if (controlPanel) controlPanel.classList.remove('hidden');
+            // Keep race track hidden on control screen
+            // document.getElementById('raceTrack').classList.remove('hidden');
+            // document.getElementById('bigTimer').classList.remove('hidden');
+        } else {
+            // Display mode - show ONLY race track and timer (no controls)
+            const raceTrack = document.getElementById('raceTrack');
+            const bigTimer = document.getElementById('bigTimer');
+            
+            if (raceTrack) raceTrack.classList.remove('hidden');
+            if (bigTimer) bigTimer.classList.remove('hidden');
+            // DO NOT show raceInfo or controlPanel on display - those are only for index.html
+        }
+        
         this.raceStarted = false;
         this.raceFinished = false;
         this.racePaused = false;
         
         // Hide continue button
-        document.getElementById('continueBtn').classList.add('hidden');
-        document.getElementById('continueBankBtn').classList.add('hidden');
-        document.getElementById('pauseBtn').disabled = false;
+        const continueBtn = document.getElementById('continueBtn');
+        const continueBankBtn = document.getElementById('continueBankBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const startBtn = document.getElementById('startRaceBtn');
+        const controlStartBtn = document.getElementById('controlStartBtn');
+        
+        if (continueBtn) continueBtn.style.display = 'none';
+        if (continueBankBtn) continueBankBtn.classList.add('hidden');
+        if (pauseBtn) pauseBtn.disabled = false;
+        
+        // Re-enable both Start Race buttons (in case they were disabled)
+        if (this.imagesLoaded) {
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = '🚀 Start Race';
+            }
+            if (controlStartBtn) {
+                controlStartBtn.disabled = false;
+                controlStartBtn.textContent = '🚀 Start';
+            }
+        }
+        
         this.currentRaceNumber = this.stats.totalRaces + 1;
         
-        document.getElementById('raceNumber').textContent = `#${this.currentRaceNumber}`;
-        document.getElementById('raceStatus').textContent = 'Waiting to start...';
-        document.getElementById('timeLeft').textContent = `${this.raceDuration}s`;
-        document.getElementById('pauseBtn').disabled = true;
-        document.getElementById('fullscreenBtn').textContent = '🚀 Start';
+        // Update UI elements if they exist
+        const raceNumber = document.getElementById('raceNumber');
+        const raceStatus = document.getElementById('raceStatus');
+        const timeLeft = document.getElementById('timeLeft');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        if (raceNumber) raceNumber.textContent = `#${this.currentRaceNumber}`;
+        if (raceStatus) raceStatus.textContent = 'Waiting to start...';
+        if (timeLeft) timeLeft.textContent = `${this.raceDuration}s`;
+        if (pauseBtn) pauseBtn.disabled = true;
+        if (fullscreenBtn) fullscreenBtn.textContent = '🚀 Start';
 
         this.soundManager.init();
     }
@@ -897,47 +1210,90 @@ class Game {
     beginRace() {
         if (this.raceStarted) return;
         
-        // Ẩn finish line (sẽ hiện lại khi gần đích)
-        document.getElementById('finishLine').classList.add('hidden');
+        // Set race started flag BEFORE calling animate()
+        this.raceStarted = true;
         
-        // Auto fullscreen
-        const track = document.getElementById('raceTrack');
-        if (!document.fullscreenElement) {
-            track.requestFullscreen().then(() => {
-                this.isFullscreen = true;
-                // Show countdown after fullscreen is activated
+        console.log('=== RACE SETUP ===');
+        console.log('Preparing race with', this.ducks.length, 'ducks');
+        console.log('Target pixel (finish line):', this.trackLength);
+        console.log('==================');
+        
+        // Only show countdown and auto-fullscreen on display mode
+        if (this.isDisplayMode) {
+            // Ẩn finish line (sẽ hiện lại khi gần đích)
+            const finishLine = document.getElementById('finishLine');
+            if (finishLine) finishLine.classList.add('hidden');
+            
+            // Auto fullscreen on display window
+            const track = document.getElementById('raceTrack');
+            if (track && !document.fullscreenElement) {
+                track.requestFullscreen().then(() => {
+                    this.isFullscreen = true;
+                    // Show countdown after fullscreen is activated
+                    this.showCountdown(() => {
+                        // Set start time AFTER countdown finishes (only if not already set from control)
+                        if (!this.startTime) {
+                            this.startTime = Date.now();
+                        }
+                        console.log('=== RACE START ===');
+                        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
+                        this.soundManager.playStartSound();
+                        this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
+                        this.animate();
+                    });
+                }).catch(err => {
+                    console.log('Fullscreen error:', err);
+                    // Show countdown anyway if fullscreen fails
+                    this.showCountdown(() => {
+                        // Set start time AFTER countdown finishes (only if not already set from control)
+                        if (!this.startTime) {
+                            this.startTime = Date.now();
+                        }
+                        console.log('=== RACE START ===');
+                        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
+                        this.soundManager.playStartSound();
+                        this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
+                        this.animate();
+                    });
+                });
+            } else {
+                // Already in fullscreen, show countdown immediately
                 this.showCountdown(() => {
+                    // Set start time AFTER countdown finishes (only if not already set from control)
+                    if (!this.startTime) {
+                        this.startTime = Date.now();
+                    }
+                    console.log('=== RACE START ===');
+                    console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
                     this.soundManager.playStartSound();
                     this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
                     this.animate();
                 });
-            }).catch(err => {
-                console.log('Fullscreen error:', err);
-                // Show countdown anyway if fullscreen fails
-                this.showCountdown(() => {
-                    this.soundManager.playStartSound();
-                    this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
-                    this.animate();
-                });
-            });
+            }
         } else {
-            // Already in fullscreen, show countdown immediately
+            // Control mode - show simple countdown before starting
             this.showCountdown(() => {
+                // Set start time AFTER countdown finishes
+                this.startTime = Date.now();
+                console.log('=== RACE START ===');
+                console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
                 this.soundManager.playStartSound();
-                this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
+                this.soundManager.startRacingAmbiance();
                 this.animate();
             });
         }
         
-        this.raceStarted = true;
-        this.startTime = Date.now();
-        console.log('=== RACE START ===');
-        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-        console.log('Target pixel (finish line):', this.trackLength);
-        console.log('==================');
-        document.getElementById('raceStatus').textContent = 'Racing!';
-        document.getElementById('pauseBtn').disabled = false;
-        document.getElementById('fullscreenBtn').textContent = '🔲 Fullscreen';
+        // Update UI elements
+        const raceStatus = document.getElementById('raceStatus');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        if (raceStatus) raceStatus.textContent = 'Racing!';
+        if (pauseBtn) pauseBtn.disabled = false;
+        if (fullscreenBtn) fullscreenBtn.textContent = '🔲 Fullscreen';
+        
+        // Update race number display
+        safeElementAction('raceNumber', el => el.textContent = `#${this.currentRaceNumber}`);
     }
 
     createDuckElement(duck, index) {
@@ -1038,14 +1394,254 @@ class Game {
         }, 600);
     }
 
+    handleDisplayRaceFinished(data) {
+        const { winner, finishTime, rankings } = data;
+        
+        console.log('Control: Processing race finish from display');
+        console.log('Winner:', winner.name, 'Time:', finishTime);
+        
+        // Stop control panel timer
+        this.raceFinished = true;
+        this.raceStarted = false;
+        
+        // Update local state
+        this.rankings = rankings;
+        
+        // Play sounds on control panel
+        this.soundManager.playFinishSound();
+        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
+        
+        // Send RACE_FINISHED and SHOW_WINNER to display
+        if (this.displayChannel) {
+            this.displayChannel.postMessage({
+                type: 'RACE_FINISHED',
+                data: { winner }
+            });
+            
+            setTimeout(() => {
+                this.displayChannel.postMessage({
+                    type: 'SHOW_WINNER',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime)
+                    }
+                });
+            }, 500);
+        }
+        
+        // Show continue button in control panel
+        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        safeElementAction('pauseBtn', el => el.disabled = true);
+        
+        // Show victory popup on control panel
+        winner._controlFinishTime = parseFloat(finishTime);
+        this.showVictoryPopup(winner);
+        
+        // Update stats
+        this.stats.totalRaces++;
+        if (this.rankings.indexOf(this.rankings[0]) < 3) {
+            this.stats.top3Finishes++;
+        }
+        this.saveStats();
+        
+        // Update race history
+        this.raceHistory.push({
+            raceNumber: this.currentRaceNumber,
+            winner: winner.id,
+            duckCount: this.duckCount,
+            duration: this.raceDuration,
+            timestamp: new Date().toLocaleString('vi-VN')
+        });
+        
+        // Update UI
+        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
+        safeElementAction('timeLeft', el => el.textContent = '0s');
+        safeElementAction('pauseBtn', el => el.disabled = true);
+    }
+    
+    handleDisplayRaceFinished(data) {
+        const { winner, finishTime, rankings } = data;
+        
+        console.log('Control: Processing race finish from display');
+        console.log('Winner:', winner.name, 'Time:', finishTime);
+        
+        // Stop control panel timer
+        this.raceFinished = true;
+        this.raceStarted = false;
+        
+        // Update local state
+        this.rankings = rankings;
+        
+        // Play sounds on control panel
+        this.soundManager.playFinishSound();
+        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
+        
+        // Send RACE_FINISHED and SHOW_WINNER to display
+        if (this.displayChannel) {
+            this.displayChannel.postMessage({
+                type: 'RACE_FINISHED',
+                data: { winner }
+            });
+            
+            setTimeout(() => {
+                this.displayChannel.postMessage({
+                    type: 'SHOW_WINNER',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime)
+                    }
+                });
+            }, 500);
+        }
+        
+        // Show continue button in control panel
+        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        safeElementAction('pauseBtn', el => el.disabled = true);
+        
+        // Show victory popup on control panel
+        winner._controlFinishTime = parseFloat(finishTime);
+        this.showVictoryPopup(winner);
+        
+        // Update stats
+        this.stats.totalRaces++;
+        if (this.rankings.indexOf(this.rankings[0]) < 3) {
+            this.stats.top3Finishes++;
+        }
+        this.saveStats();
+        
+        // Update race history
+        this.raceHistory.push({
+            raceNumber: this.currentRaceNumber,
+            winner: winner.id,
+            duckCount: this.duckCount,
+            duration: this.raceDuration,
+            timestamp: new Date().toLocaleString('vi-VN')
+        });
+        
+        // Update UI
+        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
+        safeElementAction('timeLeft', el => el.textContent = '0s');
+        safeElementAction('pauseBtn', el => el.disabled = true);
+    }
+
+    updateControlPanelTimer() {
+        if (!this.raceStarted || this.raceFinished || this.racePaused || this.isDisplayMode) {
+            return;
+        }
+        
+        // Update timer display on control panel
+        const elapsed = (Date.now() - this.startTime) / 1000;
+        const timeLeft = Math.max(0, this.raceDuration - elapsed);
+        
+        const raceStatus = document.getElementById('raceStatus');
+        const timeLeftEl = document.getElementById('timeLeft');
+        
+        if (raceStatus) raceStatus.textContent = 'Racing!';
+        if (timeLeftEl) timeLeftEl.textContent = `${Math.ceil(timeLeft)}s`;
+        
+        // Send update to display
+        if (this.displayChannel) {
+            this.displayChannel.postMessage({
+                type: 'RACE_UPDATE',
+                data: {
+                    timeLeft: Math.ceil(timeLeft),
+                    raceNumber: this.currentRaceNumber,
+                    status: 'Racing!'
+                }
+            });
+        }
+        
+        // Continue updating every 100ms
+        if (this.raceStarted && !this.raceFinished && !this.racePaused) {
+            setTimeout(() => this.updateControlPanelTimer(), 100);
+        }
+    }
+
+    handleDisplayRaceFinished(data) {
+        const { winner, finishTime, rankings } = data;
+        
+        console.log('Control: Processing race finish from display');
+        console.log('Winner:', winner.name, 'Time:', finishTime);
+        
+        // Stop control panel timer
+        this.raceFinished = true;
+        this.raceStarted = false;
+        
+        // Update local state
+        this.rankings = rankings;
+        
+        // Play sounds on control panel
+        this.soundManager.playFinishSound();
+        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
+        
+        // Send RACE_FINISHED and SHOW_WINNER to display
+        if (this.displayChannel) {
+            this.displayChannel.postMessage({
+                type: 'RACE_FINISHED',
+                data: { winner }
+            });
+            
+            setTimeout(() => {
+                this.displayChannel.postMessage({
+                    type: 'SHOW_WINNER',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime)
+                    }
+                });
+            }, 500);
+        }
+        
+        // Show continue button in control panel
+        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        safeElementAction('pauseBtn', el => el.disabled = true);
+        
+        // Show victory popup on control panel
+        winner._controlFinishTime = parseFloat(finishTime);
+        this.showVictoryPopup(winner);
+        
+        // Update stats
+        this.stats.totalRaces++;
+        if (this.rankings.indexOf(this.rankings[0]) < 3) {
+            this.stats.top3Finishes++;
+        }
+        this.saveStats();
+        
+        // Update race history
+        this.raceHistory.push({
+            raceNumber: this.currentRaceNumber,
+            winner: winner.id,
+            duckCount: this.duckCount,
+            duration: this.raceDuration,
+            timestamp: new Date().toLocaleString('vi-VN')
+        });
+        
+        // Update UI
+        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
+        safeElementAction('timeLeft', el => el.textContent = '0s');
+        safeElementAction('pauseBtn', el => el.disabled = true);
+    }
+
     pauseRace() {
         if (!this.racePaused && this.raceStarted && !this.raceFinished) {
             this.racePaused = true;
             this.pausedTime = Date.now();
             this.soundManager.stopRacingAmbiance(); // Stop sounds when paused
-            document.getElementById('pauseBtn').disabled = true;
-            document.getElementById('resumeBtn').disabled = false;
-            document.getElementById('raceStatus').textContent = 'Paused';
+            safeElementAction('pauseBtn', el => el.disabled = true);
+            safeElementAction('resumeBtn', el => el.disabled = false);
+            safeElementAction('raceStatus', el => el.textContent = 'Paused');
+            
+            // Send pause command to display window
+            if (this.displayChannel && !this.isDisplayMode) {
+                this.displayChannel.postMessage({
+                    type: 'PAUSE_RACE',
+                    data: {}
+                });
+                console.log('Sent PAUSE_RACE to display');
+            }
         }
     }
 
@@ -1055,10 +1651,19 @@ class Game {
             const pauseDuration = Date.now() - this.pausedTime;
             this.startTime += pauseDuration;
             this.soundManager.startRacingAmbiance(); // Resume sounds when resumed
-            document.getElementById('pauseBtn').disabled = false;
-            document.getElementById('resumeBtn').disabled = true;
-            document.getElementById('raceStatus').textContent = 'Racing!';
+            safeElementAction('pauseBtn', el => el.disabled = false);
+            safeElementAction('resumeBtn', el => el.disabled = true);
+            safeElementAction('raceStatus', el => el.textContent = 'Racing!');
             this.animate();
+            
+            // Send resume command to display window
+            if (this.displayChannel && !this.isDisplayMode) {
+                this.displayChannel.postMessage({
+                    type: 'RESUME_RACE',
+                    data: { pauseDuration }
+                });
+                console.log('Sent RESUME_RACE to display');
+            }
         }
     }
 
@@ -1080,14 +1685,45 @@ class Game {
 
         const elapsed = (Date.now() - this.startTime) / 1000;
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
-        document.getElementById('timeLeft').textContent = `${timeLeft.toFixed(1)}s`;
         
-        // Big timer shows elapsed time (counting up)
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = Math.floor(elapsed % 60);
-        const milliseconds = Math.floor((elapsed % 1) * 100);
-        document.getElementById('bigTimer').querySelector('.timer-display').textContent = 
-            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(2, '0')}`;
+        // Update time left on control panel (index.html)
+        const timeLeftEl = document.getElementById('timeLeft');
+        if (timeLeftEl) {
+            timeLeftEl.textContent = `${timeLeft.toFixed(1)}s`;
+            // Debug: Log every 60 frames (~1 second)
+            if (!this.frameCounter) this.frameCounter = 0;
+            this.frameCounter++;
+            if (this.frameCounter % 60 === 0) {
+                console.log(`[Control Panel] Time Left: ${timeLeft.toFixed(1)}s, Updated element:`, timeLeftEl.textContent);
+            }
+        } else {
+            console.error('[Control Panel] timeLeft element NOT FOUND!');
+        }
+        
+        // Send update to display window
+        if (this.displayChannel && !this.isDisplayMode) {
+            this.displayChannel.postMessage({
+                type: 'RACE_UPDATE',
+                data: {
+                    timeLeft,
+                    raceNumber: this.currentRaceNumber,
+                    status: 'Racing!'
+                }
+            });
+        }
+        
+        // Big timer shows elapsed time (counting up) - only update if element exists
+        const bigTimerEl = document.getElementById('bigTimer');
+        if (bigTimerEl) {
+            const timerDisplay = bigTimerEl.querySelector('.timer-display');
+            if (timerDisplay) {
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = Math.floor(elapsed % 60);
+                const milliseconds = Math.floor((elapsed % 1) * 100);
+                timerDisplay.textContent = 
+                    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(2, '0')}`;
+            }
+        }
 
         // Check if duck's left edge passes finish line (minus small offset for visual accuracy)
         const hasFinisher = this.ducks.some(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET);
@@ -1178,6 +1814,11 @@ class Game {
         const viewportStart = this.cameraOffset - this.viewportBuffer;
         const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
         const currentVisibleDucks = new Set();
+        
+        if (!this.trackContainer) {
+            console.error('trackContainer is null in updateDuckPositions!');
+            return;
+        }
         
         this.ducks.forEach(duck => {
             const screenX = duck.position - this.cameraOffset;
@@ -1345,10 +1986,38 @@ class Game {
         
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
+            this.animationId = null;
         }
 
         // Stop racing sounds
         this.soundManager.stopRacingAmbiance();
+        
+        // Display mode: Send winner info back to control then stop
+        if (this.isDisplayMode) {
+            console.log('Display: Race ended, sending winner to control');
+            
+            // Calculate rankings and winner
+            this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
+            const winner = this.rankings[0];
+            
+            // Calculate finish time
+            const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+            
+            // Send winner info to control panel
+            if (this.displayChannel) {
+                this.displayChannel.postMessage({
+                    type: 'DISPLAY_RACE_FINISHED',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime),
+                        rankings: this.rankings
+                    }
+                });
+                console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name);
+            }
+            
+            return; // Display doesn't show victory popup locally
+        }
 
         this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
         const winner = this.rankings[0];
@@ -1356,12 +2025,35 @@ class Game {
         this.soundManager.playFinishSound();
         setTimeout(() => this.soundManager.playCrowdCheer(), 300);
         
-        // Show continue button in control panel
-        document.getElementById('continueBtn').classList.remove('hidden');
-        document.getElementById('continueBankBtn').classList.remove('hidden');
-        document.getElementById('pauseBtn').disabled = true;
+        // Calculate finish time here to ensure consistency
+        const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+        
+        // Send finish message to display window
+        if (this.displayChannel && !this.isDisplayMode) {
+            this.displayChannel.postMessage({
+                type: 'RACE_FINISHED',
+                data: { winner }
+            });
+            
+            // Show winner on display with synchronized finish time
+            setTimeout(() => {
+                this.displayChannel.postMessage({
+                    type: 'SHOW_WINNER',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime) // Send as number
+                    }
+                });
+            }, 500);
+        }
+        
+        // Show continue button in control panel (only if elements exist)
+        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        safeElementAction('pauseBtn', el => el.disabled = true);
         
         // Show victory popup
+        winner._controlFinishTime = parseFloat(finishTime); // Store finish time on winner object
         this.showVictoryPopup(winner);
 
         this.stats.totalRaces++;
@@ -1379,14 +2071,14 @@ class Game {
             timestamp: new Date().toLocaleString('vi-VN')
         });
 
-        document.getElementById('raceStatus').textContent = 'Finished!';
-        document.getElementById('timeLeft').textContent = '0s';
-        document.getElementById('pauseBtn').disabled = true;
+        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
+        safeElementAction('timeLeft', el => el.textContent = '0s');
+        safeElementAction('pauseBtn', el => el.disabled = true);
         
         const resultPanel = document.getElementById('resultPanel');
-        resultPanel.classList.remove('hidden');
+        if (resultPanel) resultPanel.classList.remove('hidden');
 
-        document.getElementById('resultTitle').innerHTML = '🏆 Race Finished!';
+        safeElementAction('resultTitle', el => el.innerHTML = '🏆 Race Finished!');
         
         let resultHTML = `
             <div class="result-winner">
@@ -1455,8 +2147,9 @@ class Game {
         // Set winner name
         winnerNameEl.textContent = winner.name;
         
-        // Set winner stats
+        // Calculate finish time in seconds (elapsed time from race start)
         const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+        console.log('Victory popup - Start time:', this.startTime, 'Current:', Date.now(), 'Elapsed:', finishTime);
         winnerStatsEl.innerHTML = `
             <p><strong>🕒 Time:</strong> ${finishTime}s</p>
             <p><strong>📍 Position:</strong> 1st</p>
@@ -1516,8 +2209,16 @@ class Game {
         // Đóng victory popup
         this.closeVictoryPopup();
         
+        // Send message to display to close victory popup
+        if (this.displayChannel && !this.isDisplayMode) {
+            this.displayChannel.postMessage({
+                type: 'CLOSE_VICTORY',
+                data: {}
+            });
+        }
+        
         // Ẩn result panel
-        document.getElementById('resultPanel').classList.add('hidden');
+        safeElementAction('resultPanel', el => el.classList.add('hidden'));
         
         // Check if enough racers remain
         if (this.activeDuckNames.length < MINIMUM_PARTICIPANTS) {
@@ -1535,8 +2236,17 @@ class Game {
         this.rankings = [];
         // this.highlights = [];
         
+        // Send RESET_RACE message to display to clear old race
+        if (this.displayChannel && !this.isDisplayMode) {
+            this.displayChannel.postMessage({
+                type: 'RESET_RACE',
+                data: {}
+            });
+            console.log('Sent RESET_RACE to display');
+        }
+        
         // Ẩn vạch đích
-        document.getElementById('finishLine').classList.add('hidden');
+        safeElementAction('finishLine', el => el.classList.add('hidden'));
         
         if (this.trackContainer) {
             this.trackContainer.innerHTML = '';
@@ -1692,23 +2402,25 @@ class Game {
     }
     
     toggleFullscreen() {
-        // If race not started yet, begin the race
+        // If race not started yet, begin the race (only on display mode)
         if (!this.raceStarted && !this.raceFinished && this.ducks.length > 0) {
             this.beginRace();
             return;
         }
         
-        // Otherwise toggle fullscreen
-        const track = document.getElementById('raceTrack');
-        if (!document.fullscreenElement) {
-            track.requestFullscreen().catch(err => {
-                console.log('Fullscreen error:', err);
-            });
-            this.isFullscreen = true;
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-                this.isFullscreen = false;
+        // Otherwise toggle fullscreen (only works on display mode)
+        if (this.isDisplayMode) {
+            const track = document.getElementById('raceTrack');
+            if (!document.fullscreenElement) {
+                track.requestFullscreen().catch(err => {
+                    console.log('Fullscreen error:', err);
+                });
+                this.isFullscreen = true;
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                    this.isFullscreen = false;
+                }
             }
         }
     }

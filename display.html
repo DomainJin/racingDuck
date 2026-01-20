@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racing Display - Full Screen</title>
+    <link rel="stylesheet" href="style.css?v=43">
+    <style>
+        /* Full screen display mode */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        .display-container {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        
+        /* Hide all controls on display */
+        .control-panel,
+        .settings-panel,
+        .history-win,
+        .result-panel,
+        .history-panel,
+        .race-info {
+            display: none !important;
+        }
+        
+        /* Race info at top */
+        .race-info {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: rgba(0,0,0,0.85);
+            padding: 15px 40px;
+            border-radius: 15px;
+            display: flex;
+            gap: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .race-info .info-item {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .race-info .label {
+            color: #FFD700;
+            margin-right: 10px;
+        }
+        
+        /* Big timer */
+        .big-timer {
+            position: fixed;
+            top: 100px;
+            right: 30px;
+            background: rgba(0,0,0,0.85);
+            padding: 20px 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .big-timer .timer-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #FFD700;
+            font-family: 'Courier New', monospace;
+        }
+        
+        /* Race track full screen with 16:9 aspect ratio */
+        .race-track {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100vw;
+            height: calc(100vw * 9 / 16); /* 16:9 aspect ratio */
+            max-height: 100vh;
+            max-width: calc(100vh * 16 / 9);
+        }
+        
+        /* Ensure race elements scale properly */
+        .race-river {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .bank-top, .bank-bot {
+            width: 100%;
+        }
+        
+        /* Loading indicator */
+        .loading-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            font-size: 32px;
+            z-index: 1000;
+        }
+        
+        .loading-display h1 {
+            color: #FFD700;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="display-container">
+        <!-- Loading Message -->
+        <div class="loading-display" id="loadingDisplay">
+            <h1>🏁 Racing Display 🏁</h1>
+            <p>Waiting for race to start...</p>
+            <p style="font-size: 18px; color: #888;">Configure race in the main control window</p>
+        </div>
+        
+        <!-- No race info on display - all controls are on index.html -->
+
+        <!-- Big Timer Display -->
+        <div class="big-timer hidden" id="bigTimer">
+            <div class="timer-display">00:00:00</div>
+        </div>
+
+        <!-- Race Track -->
+        <div class="race-track" id="raceTrack">
+            <div class="bank-top" id="bankTop"></div>
+            <div class="race-river" id="raceRiver">
+                <div class="water-flow"></div>
+                <div class="water-ripples"></div>
+                <div class="fish-layer" id="fishLayer">
+                    <div class="fish fish-1">🐟</div>
+                    <div class="fish fish-2">🐠</div>
+                    <div class="fish fish-3">🐡</div>
+                    <div class="fish fish-4">🐟</div>
+                    <div class="fish fish-5">🐠</div>
+                </div>
+                <!-- Ducks will be added here dynamically -->
+            </div>
+            <div class="bank-bot" id="bankBot"></div>
+            <div class="finish-line hidden" id="finishLine">FINISH</div>
+        </div>
+    </div>
+
+    <!-- Victory Popup -->
+    <div class="victory-popup hidden" id="victoryPopup">
+        <div class="victory-overlay"></div>
+        <div class="victory-content">
+            <div class="victory-header">
+                <h1>🎉 VICTORY! 🎉</h1>
+            </div>
+            <div class="victory-body">
+                <div class="winner-icon" id="winnerIcon"></div>
+                <h2 class="winner-name" id="winnerName">Winner Name</h2>
+                <div class="winner-stats" id="winnerStats"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js?v=24"></script>
+    <script>
+        // Display mode - sync with main window via BroadcastChannel
+        const displayChannel = new BroadcastChannel('race_display');
+        let displayGame = null;
+        
+        window.addEventListener('load', function() {
+            console.log('Display mode initialized');
+            console.log('BroadcastChannel created');
+            
+            try {
+                // Create game instance for display
+                console.log('Creating Game instance...');
+                displayGame = new Game();
+                console.log('Game instance created');
+                
+                displayGame.isDisplayMode = true;
+                console.log('Display game created, isDisplayMode:', displayGame.isDisplayMode);
+                
+                // Don't load images yet - wait for START_RACE
+                console.log('Display mode: Ready to receive race data');
+                
+                // Update loading display - ready but no icons loaded yet
+                const loadingEl = document.getElementById('loadingDisplay');
+                if (loadingEl) {
+                    loadingEl.innerHTML = `
+                        <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
+                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for race to start...</p>
+                        <p style="color: #888; font-size: 18px; margin-top: 10px;">Icons will load automatically when race starts</p>
+                        <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
+                    `;
+                }
+            } catch (error) {
+                console.error('❌ ERROR creating Game instance:', error);
+                console.error('Error stack:', error.stack);
+                document.getElementById('loadingDisplay').innerHTML = `
+                    <h1 style="color: #f00;">❌ Error Loading Game</h1>
+                    <p style="color: #fff;">${error.message}</p>
+                    <p style="color: #888; font-size: 14px;">Check console for details</p>
+                `;
+                return;
+            }
+            
+            // Display is ready immediately - images will load on-demand when race starts
+            
+            // Listen for messages from control window
+            displayChannel.onmessage = (event) => {
+                console.log('📨 Display received message:', event.data);
+                const { type, data } = event.data;
+                
+                switch(type) {
+                    case 'START_RACE':
+                        console.log('🏁 START_RACE message received');
+                        handleStartRace(data);
+                        break;
+                    case 'RACE_UPDATE':
+                        handleRaceUpdate(data);
+                        break;
+                    case 'RACE_FINISHED':
+                        handleRaceFinished(data);
+                        break;
+                    case 'SHOW_WINNER':
+                        handleShowWinner(data);
+                        break;
+                    case 'CLOSE_VICTORY':
+                        handleCloseVictory();
+                        break;
+                    case 'RESET_RACE':
+                        handleResetRace();
+                        break;
+                    case 'PAUSE_RACE':
+                        handlePauseRace();
+                        break;
+                    case 'RESUME_RACE':
+                        handleResumeRace(data);
+                        break;
+                    default:
+                        console.log('Unknown message type:', type);
+                }
+            };
+            
+            // Send ready message
+            displayChannel.postMessage({ type: 'DISPLAY_READY' });
+            console.log('Sent DISPLAY_READY message');
+        });
+        
+        function handleStartRace(data) {
+            console.log('Display: START_RACE received', data);
+            
+            // Load images on-demand if not already loaded
+            if (!displayGame.imagesLoaded) {
+                console.log('Display: Loading images on-demand...');
+                
+                // Show loading message
+                const loadingEl = document.getElementById('loadingDisplay');
+                if (loadingEl) {
+                    loadingEl.innerHTML = `
+                        <h1 style="color: #FFD700;">⏳ Loading Icons...</h1>
+                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Race starting soon...</p>
+                        <p style="color: #888; font-size: 16px; margin-top: 10px;">Loading animated ducks...</p>
+                    `;
+                }
+                
+                // Load images then start race
+                displayGame.initDisplayMode().then(() => {
+                    console.log('✅ Images loaded, starting race');
+                    startRaceWithData(data);
+                }).catch(error => {
+                    console.error('❌ Error loading images:', error);
+                    if (loadingEl) {
+                        loadingEl.innerHTML = `
+                            <h1 style="color: #f00;">❌ Error Loading Icons</h1>
+                            <p style="color: #fff;">${error.message}</p>
+                        `;
+                    }
+                });
+                
+                return;
+            }
+            
+            // Images already loaded, start immediately
+            startRaceWithData(data);
+        }
+        
+        function startRaceWithData(data) {
+            const { duckCount, raceDuration, theme, duckNames, duckImages, startTime } = data;
+            
+            // Close victory popup if still open from previous race
+            if (displayGame) {
+                displayGame.closeVictoryPopup();
+                
+                // CRITICAL: Reset timing variables to prevent timer continuation
+                displayGame.startTime = null;
+                displayGame.lastFrameTime = null;
+                
+                console.log('Display: Reset timing variables for new race');
+            }
+            
+            // Hide loading display
+            const loadingEl = document.getElementById('loadingDisplay');
+            if (loadingEl) loadingEl.classList.add('hidden');
+            
+            // Show race elements (only big timer and race track on display)
+            const bigTimer = document.getElementById('bigTimer');
+            if (bigTimer) {
+                // Reset timer to 00:00:00
+                const timerDisplay = bigTimer.querySelector('.timer-display');
+                if (timerDisplay) timerDisplay.textContent = '00:00:00';
+                bigTimer.classList.remove('hidden');
+            }
+            // raceTrack is already visible
+            
+            // Initialize race
+            displayGame.duckCount = duckCount;
+            displayGame.raceDuration = raceDuration;
+            displayGame.currentTheme = theme;
+            if (duckNames && duckNames.length > 0) {
+                displayGame.activeDuckNames = duckNames;
+            }
+            
+            console.log('Display: Setting up race with', duckCount, 'ducks');
+            displayGame.setupRace();
+            
+            console.log('Display: Beginning race');
+            displayGame.beginRace();
+        }
+        
+        function handleRaceUpdate(data) {
+            // Display mode doesn't need to update race info - only timer updates via animate()
+            // All race info is shown on index.html control panel
+            console.log('Race update received:', data);
+        }
+        
+        function handleRaceFinished(data) {
+            console.log('Race finished on display - stopping animation');
+            if (displayGame) {
+                // Stop animation loop immediately
+                displayGame.raceStarted = false;
+                displayGame.raceFinished = true;
+                
+                if (displayGame.animationId) {
+                    cancelAnimationFrame(displayGame.animationId);
+                    displayGame.animationId = null;
+                }
+                
+                // Stop all sounds
+                displayGame.soundManager.stopRacingAmbiance();
+                
+                console.log('✅ Display animation stopped');
+            }
+        }
+        
+        function handleShowWinner(data) {
+            const { winner, finishTime } = data;
+            if (displayGame && winner) {
+                // If finishTime provided, set it on winner object for display
+                if (finishTime !== undefined) {
+                    winner._displayFinishTime = finishTime;
+                    console.log('Display: Using synchronized finishTime:', finishTime);
+                }
+                displayGame.showVictoryPopup(winner);
+            }
+        }
+        
+        function handleCloseVictory() {
+            console.log('Closing victory popup on display');
+            if (displayGame) {
+                displayGame.closeVictoryPopup();
+            }
+        }
+        
+        function handleResetRace() {
+            console.log('Resetting race on display');
+            if (displayGame) {
+                // Stop animation if still running
+                if (displayGame.animationId) {
+                    cancelAnimationFrame(displayGame.animationId);
+                    displayGame.animationId = null;
+                }
+                
+                // Clear all race state
+                displayGame.ducks = [];
+                displayGame.duckElements.clear();
+                displayGame.raceStarted = false;
+                displayGame.raceFinished = false;
+                displayGame.racePaused = false;
+                displayGame.rankings = [];
+                displayGame.startTime = null;
+                displayGame.lastFrameTime = null;
+                
+                // Stop sounds
+                displayGame.soundManager.stopRacingAmbiance();
+                
+                // Clear track container
+                if (displayGame.trackContainer) {
+                    displayGame.trackContainer.innerHTML = '';
+                }
+                
+                // Hide race elements and show loading
+                const loadingEl = document.getElementById('loadingDisplay');
+                if (loadingEl) {
+                    loadingEl.classList.remove('hidden');
+                    loadingEl.innerHTML = `
+                        <h1 style="color: #0f0; text-shadow: 0 0 20px #0f0;">✅ DISPLAY READY!</h1>
+                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Waiting for next race...</p>
+                        <p style="color: #0f0; font-size: 16px; margin-top: 20px;">👉 Click "Start Race" in the control window</p>
+                    `;
+                }
+                
+                // Hide timer and finish line
+                const bigTimer = document.getElementById('bigTimer');
+                const finishLine = document.getElementById('finishLine');
+                
+                if (bigTimer) bigTimer.classList.add('hidden');
+                if (finishLine) finishLine.classList.add('hidden');
+                
+                console.log('✅ Display reset complete, ready for next race');
+            }
+        }
+        
+        function handlePauseRace() {
+            console.log('Pausing race on display');
+            if (displayGame) {
+                displayGame.pauseRace();
+            }
+        }
+        
+        function handleResumeRace(data) {
+            console.log('Resuming race on display');
+            if (displayGame) {
+                displayGame.resumeRace();
+            }
+        }
+    </script>
+</body>
+</html>
