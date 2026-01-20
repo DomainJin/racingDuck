@@ -291,38 +291,9 @@
         function handleStartRace(data) {
             console.log('Display: START_RACE received', data);
             
-            // Load images on-demand if not already loaded
-            if (!displayGame.imagesLoaded) {
-                console.log('Display: Loading images on-demand...');
-                
-                // Show loading message
-                const loadingEl = document.getElementById('loadingDisplay');
-                if (loadingEl) {
-                    loadingEl.innerHTML = `
-                        <h1 style="color: #FFD700;">⏳ Loading Icons...</h1>
-                        <p style="color: #fff; font-size: 24px; margin-top: 20px;">Race starting soon...</p>
-                        <p style="color: #888; font-size: 16px; margin-top: 10px;">Loading animated ducks...</p>
-                    `;
-                }
-                
-                // Load images then start race
-                displayGame.initDisplayMode().then(() => {
-                    console.log('✅ Images loaded, starting race');
-                    startRaceWithData(data);
-                }).catch(error => {
-                    console.error('❌ Error loading images:', error);
-                    if (loadingEl) {
-                        loadingEl.innerHTML = `
-                            <h1 style="color: #f00;">❌ Error Loading Icons</h1>
-                            <p style="color: #fff;">${error.message}</p>
-                        `;
-                    }
-                });
-                
-                return;
-            }
-            
-            // Images already loaded, start immediately
+            // Icons should already be loaded since display loads them on open
+            // Just start the race immediately
+            console.log('Display: Icons already loaded, starting race immediately');
             startRaceWithData(data);
         }
         
