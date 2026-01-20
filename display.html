@@ -198,11 +198,24 @@
                 }
                 
                 // Icons will be loaded automatically by constructor
-                // Wait for them to finish loading
+                // Wait for them to finish loading with timeout
+                let checkCount = 0;
+                const maxChecks = 100; // 10 seconds max (100 * 100ms)
+                
                 const checkIconsLoaded = setInterval(() => {
-                    if (displayGame.imagesLoaded) {
+                    checkCount++;
+                    console.log(`Checking icons loaded... (${checkCount}/${maxChecks}) - imagesLoaded:`, displayGame.imagesLoaded);
+                    
+                    if (displayGame.imagesLoaded || checkCount >= maxChecks) {
                         clearInterval(checkIconsLoaded);
-                        console.log('✅ Display icons loaded, notifying control panel');
+                        
+                        if (displayGame.imagesLoaded) {
+                            console.log('✅ Display icons loaded successfully, notifying control panel');
+                        } else {
+                            console.warn('⚠️ Timeout waiting for icons, proceeding anyway');
+                            // Force set to true to allow race to start
+                            displayGame.imagesLoaded = true;
+                        }
                         
                         // Update loading display
                         if (loadingEl) {
@@ -218,6 +231,7 @@
                             type: 'DISPLAY_ICONS_LOADED',
                             data: {}
                         });
+                        console.log('Sent DISPLAY_ICONS_LOADED to control panel');
                     }
                 }, 100);
             } catch (error) {
