@@ -349,6 +349,10 @@ class Game {
         this.rankings = [];
         this.soundManager = new SoundManager();
         
+        // Performance optimization - viewport culling
+        this.viewportBuffer = 500; // Render ducks 500px outside viewport
+        this.visibleDucks = new Set(); // Track which ducks are currently visible
+        
         // Delta time normalization - 60 FPS baseline
         this.targetFPS = 60;
         this.targetFrameTime = 1000 / this.targetFPS; // ~16.67ms
@@ -774,8 +778,8 @@ class Game {
         this.raceDuration = parseInt(document.getElementById('raceDuration').value) || 10;
         this.soundManager.setEnabled(document.getElementById('soundToggle').checked);
 
-        if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 1000) {
-            alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 1000!`);
+        if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
+            alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 2000!`);
             return;
         }
 
@@ -860,7 +864,8 @@ class Game {
             duck.randomizeSpeed();
             this.ducks.push(duck);
             
-            this.createDuckElement(duck, i);
+            // Don't create elements upfront for performance - they'll be created lazily when visible
+            // this.createDuckElement(duck, i);
         }
 
         document.getElementById('settingsPanel').classList.add('hidden');
@@ -1094,9 +1099,24 @@ class Game {
             return;
         }
 
+        // Performance optimization: Only update ducks near viewport
+        const viewportStart = this.cameraOffset - this.viewportBuffer;
+        const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
+        
         this.ducks.forEach(duck => {
-            const currentRank = this.rankings.findIndex(d => d.id === duck.id) + 1 || this.ducks.length;
-            duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime);
+            // Always update finished ducks and ducks near viewport
+            const isNearViewport = duck.position >= viewportStart && duck.position <= viewportEnd;
+            const shouldUpdate = duck.finished || isNearViewport || duck.position >= viewportEnd - 1000; // Always update leaders
+            
+            if (shouldUpdate) {
+                const currentRank = this.rankings.findIndex(d => d.id === duck.id) + 1 || this.ducks.length;
+                duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime);
+            } else {
+                // Lightweight update for off-screen ducks - only position
+                if (!duck.finished) {
+                    duck.position += (duck.speed || duck.baseSpeed) * this.deltaTime;
+                }
+            }
         });
 
         const oldRankings = [...this.rankings];
@@ -1155,17 +1175,69 @@ class Game {
     }
 
     updateDuckPositions() {
+        const viewportStart = this.cameraOffset - this.viewportBuffer;
+        const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
+        const currentVisibleDucks = new Set();
+        
         this.ducks.forEach(duck => {
-            const duckEl = this.duckElements.get(duck.id);
-            if (duckEl) {
-                const screenX = duck.position - this.cameraOffset;
+            const screenX = duck.position - this.cameraOffset;
+            const isVisible = duck.position >= viewportStart && duck.position <= viewportEnd;
+            
+            if (isVisible) {
+                currentVisibleDucks.add(duck.id);
+                
+                let duckEl = this.duckElements.get(duck.id);
+                
+                // Lazy creation - only create element when duck enters viewport
+                if (!duckEl) {
+                    const duckHeight = 150;
+                    const topPadding = 10;
+                    const bottomPadding = 10;
+                    const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
+                    const laneHeight = availableHeight / (this.duckCount - 1);
+                    const index = this.ducks.indexOf(duck);
+                    
+                    duckEl = document.createElement('div');
+                    duckEl.className = 'duck-element';
+                    duckEl.style.top = `${topPadding + index * laneHeight}px`;
+                    duckEl.style.left = '0px';
+                    
+                    if (this.imagesLoaded && this.duckImages.length > 0) {
+                        const iconIndex = (duck.id - 1) % this.duckImages.length;
+                        const img = document.createElement('img');
+                        img.src = this.duckImages[iconIndex][0].src;
+                        img.className = 'duck-icon';
+                        img.alt = duck.name;
+                        img.style.width = '150px';
+                        img.style.height = '150px';
+                        duckEl.appendChild(img);
+                    } else {
+                        const circle = document.createElement('div');
+                        circle.style.width = '150px';
+                        circle.style.height = '150px';
+                        circle.style.borderRadius = '50%';
+                        circle.style.background = duck.color;
+                        duckEl.appendChild(circle);
+                    }
+                    
+                    const nameLabel = document.createElement('span');
+                    nameLabel.className = 'duck-name';
+                    nameLabel.textContent = duck.name.length > 20 ? duck.name.substring(0, 18) + '..' : duck.name;
+                    duckEl.appendChild(nameLabel);
+                    
+                    this.trackContainer.appendChild(duckEl);
+                    this.duckElements.set(duck.id, duckEl);
+                }
+                
+                // Update visible ducks
                 duckEl.style.left = `${screenX}px`;
+                duckEl.style.display = '';
                 
                 const wobble = duck.getWobble(Date.now());
                 const laneShift = duck.laneOffset || 0;
                 duckEl.style.transform = `translateY(${wobble + laneShift}px)`;
                 
-                // Cập nhật animation frame
+                // Update animation frame only for visible ducks
                 if (this.imagesLoaded && this.duckImages.length > 0) {
                     const iconIndex = (duck.id - 1) % this.duckImages.length;
                     const imgEl = duckEl.querySelector('.duck-icon');
@@ -1173,8 +1245,16 @@ class Game {
                         imgEl.src = this.duckImages[iconIndex][duck.currentFrame].src;
                     }
                 }
+            } else {
+                // Hide off-screen ducks instead of removing them
+                const duckEl = this.duckElements.get(duck.id);
+                if (duckEl) {
+                    duckEl.style.display = 'none';
+                }
             }
         });
+        
+        this.visibleDucks = currentVisibleDucks;
     }
 
     updateBackgrounds() {
