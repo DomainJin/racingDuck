@@ -411,7 +411,11 @@ class Game {
             } else if (type === 'DISPLAY_ICONS_LOADED') {
                 console.log('✅ Display icons loaded successfully');
                 this.displayIconsLoaded = true;
-                this.checkBothIconsLoaded();
+                // Enable Start button now that display is ready
+                if (this.imagesLoaded) {
+                    console.log('✅ Both control and display icons ready - enabling Start button');
+                    this.enableStartButton();
+                }
             } else if (type === 'DISPLAY_RACE_FINISHED') {
                 // Display has detected winner and sent it back
                 console.log('✅ Received DISPLAY_RACE_FINISHED from display');
@@ -493,6 +497,13 @@ class Game {
             // Reset display loaded flag when opening new window
             this.displayIconsLoaded = false;
             
+            // Disable Start button temporarily until display loads icons
+            this.disableStartButton();
+            safeElementAction('openDisplayBtn', el => {
+                el.textContent = '⏳ Display is loading icons...';
+                el.disabled = true;
+            });
+            
             // Try to move to second screen if available
             if (window.screen.availLeft !== undefined) {
                 this.displayWindow.moveTo(window.screen.availLeft + window.screen.width, 0);
@@ -513,6 +524,11 @@ class Game {
                     console.log('Display window was closed');
                     clearInterval(checkWindow);
                     this.displayWindow = null;
+                    this.displayIconsLoaded = false;
+                    // Re-enable Start button for local mode
+                    if (this.imagesLoaded) {
+                        this.enableStartButton();
+                    }
                 }
             }, 1000);
             
@@ -670,11 +686,13 @@ class Game {
             displayBtn.textContent = '🖥️ Open Display Window (Secondary Screen)';
         }
         
-        // Show success notification
-        this.updateLoadingProgress('✓ All icons loaded successfully!', 100);
-        setTimeout(() => {
-            this.hideLoading();
-        }, 1500);
+        // Show success notification only if loading container exists (not in display mode)
+        if (document.getElementById('loadingContainer')) {
+            this.updateLoadingProgress('✓ All icons loaded successfully!', 100);
+            setTimeout(() => {
+                this.hideLoading();
+            }, 1500);
+        }
     }
 
     disableStartButton() {
