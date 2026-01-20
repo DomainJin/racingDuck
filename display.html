@@ -175,6 +175,7 @@
         let displayGame = null;
         
         window.addEventListener('load', function() {
+            console.log('=== DISPLAY WINDOW LOAD EVENT ===');
             console.log('Display mode initialized');
             console.log('BroadcastChannel created');
             
@@ -182,7 +183,7 @@
                 // Create game instance for display with isDisplayMode=true
                 console.log('Creating Game instance in display mode...');
                 displayGame = new Game(true); // Pass true for isDisplayMode
-                console.log('Game instance created, isDisplayMode:', displayGame.isDisplayMode);
+                console.log('✅ Game instance created, isDisplayMode:', displayGame.isDisplayMode);
                 
                 // Load icons immediately when display opens
                 console.log('Display mode: Loading icons immediately...');
@@ -330,8 +331,11 @@
                 }
             }
             
-            // Send ready message with sessionId
-            displayChannel.postMe
+            // Setup message listener BEFORE sending DISPLAY_READY
+            displayChannel.onmessage = handleDisplayMessage;
+            console.log('✅ Display message listener setup complete');
+            
+            // Send ready message
             displayChannel.postMessage({ 
                 type: 'DISPLAY_READY'
             });

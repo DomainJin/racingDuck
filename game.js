@@ -400,6 +400,7 @@ class Game {
         
         // Display window management
         this.displayWindow = null;
+        this.displayReady = false; // Track if display window is ready to receive messages
         this.displayChannel = new BroadcastChannel('race_display');
         // isDisplayMode already set in constructor parameter
         
@@ -407,7 +408,8 @@ class Game {
         this.displayChannel.onmessage = (event) => {
             const { type, data } = event.data;
             if (type === 'DISPLAY_READY') {
-                console.log('Display window is ready');
+                console.log('✅ Display window is READY to receive messages');
+                this.displayReady = true;
             } else if (type === 'DISPLAY_ICONS_LOADED') {
                 const iconCount = data.iconCount || 0;
                 console.log('✅ Display icons loaded successfully -', iconCount, 'icons');
@@ -520,6 +522,7 @@ class Game {
             
             // Reset display loaded flag when opening new window
             this.displayIconsLoaded = false;
+            this.displayReady = false; // Reset ready state for new window
             
             // Disable Start button temporarily until display loads icons
             this.disableStartButton();
@@ -558,6 +561,7 @@ class Game {
                     clearInterval(checkWindow);
                     this.displayWindow = null;
                     this.displayIconsLoaded = false;
+                    this.displayReady = false;
                     // Re-enable Start button for local mode
                     if (this.imagesLoaded) {
                         this.enableStartButton();
@@ -1072,7 +1076,7 @@ class Game {
         }
         
         // Send start message to display window
-        if (this.displayChannel) {
+        if (this.displayChannel && (!this.displayWindow || this.displayReady)) {
             console.log('startRace: Sending START_RACE message to display');
             
             const raceData = {
@@ -1101,6 +1105,11 @@ class Game {
                 }
             }, 500);
         } else {
+            if (!this.displayReady && this.displayWindow && !this.displayWindow.closed) {
+                console.error('❌ Display window opened but NOT READY yet! Please wait...');
+                alert('Display window is still loading. Please wait a moment and try again.');
+                return;
+            }
             console.warn('startRace: displayChannel not available');
         }
     }
