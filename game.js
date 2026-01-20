@@ -2334,6 +2334,32 @@ class Game {
         }, 100);
     }
 
+    sendResultsToDisplay() {
+        if (!this.displayChannel) {
+            alert('Display channel not available. Please open display tab first.');
+            return;
+        }
+
+        if (!this.winners || this.winners.length === 0) {
+            alert('No results to send!');
+            return;
+        }
+
+        console.log('📤 Sending results to display...');
+        
+        // Send SHOW_RESULTS message to display
+        this.displayChannel.postMessage({
+            type: 'SHOW_RESULTS',
+            data: {
+                winners: this.winners,
+                totalRaces: this.stats.totalRaces
+            }
+        });
+
+        console.log('✅ Results sent to display');
+        alert('Results sent to display! Check the display tab.');
+    }
+
     resetHistory() {
         if (confirm('Are you sure you want to clear victory history and start over?')) {
             this.winners = [];
