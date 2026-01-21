@@ -209,7 +209,7 @@ class Duck {
         this.targetSpeed = this.baseSpeed;
     }
 
-    update(time, currentRank, totalDucks, deltaTime = 1.0) {
+    update(time, currentRank, totalDucks, deltaTime = 1.0, inSlowdownZone = false) {
         this.previousPosition = this.position;
         if (!this.finished) {
             // Lane changing logic (time-based)
@@ -287,9 +287,9 @@ class Duck {
                 }
             }
             
-            // Check if approaching finish line (within 200px)
+            // Check if approaching finish line - only slow down in the last 50px to avoid overshooting
             const distanceToFinish = this.trackLength - FINISH_LINE_OFFSET - this.position;
-            const decelerationZone = 200;
+            const decelerationZone = 50;
             
             if (distanceToFinish <= decelerationZone && distanceToFinish > 0) {
                 // Gradually slow down as approaching finish line
@@ -301,8 +301,17 @@ class Duck {
             this.speed += this.acceleration;
             this.speed = Math.max(this.minSpeed, Math.min(this.maxSpeed * 1.7, this.speed));
             
+            // Boost speed when camera/background are stopping (inSlowdownZone) to maintain visual motion
+            let speedMultiplier = 1.0;
+            if (inSlowdownZone) {
+                // Increase multiplier as camera slows down (1.0 to 2.5x)
+                const leader = this.trackLength - this.position;
+                const slowdownProgress = Math.max(0, Math.min(1, (500 - leader) / 500)); // 0 at 500px, 1 at finish
+                speedMultiplier = 1.0 + (slowdownProgress * 1.5); // Gradually increase from 1.0x to 2.5x
+            }
+            
             // Position movement normalized to 60 FPS
-            this.position += (this.speed + (Math.random() - 0.5) * 0.3) * deltaTime;
+            this.position += (this.speed + (Math.random() - 0.5) * 0.3) * deltaTime * speedMultiplier;
             
             // Update particles (time-based)
             this.particles = this.particles.filter(p => {
@@ -1046,8 +1055,19 @@ class Game {
         // Calculate viewport width dynamically based on track container
         const trackElement = document.getElementById('raceTrack');
         this.viewportWidth = trackElement.clientWidth || 1200;
-        // Use raceRiver height (excludes bank_top and bank_bot)
-        this.trackHeight = this.trackContainer.clientHeight || 470;
+        // Calculate trackHeight from race-river which is 60% of race-track
+        // Use race-track height and calculate race-river portion
+        const raceTrackHeight = trackElement.clientHeight || 250;
+        this.trackHeight = raceTrackHeight * 0.6; // race-river is 60% of race-track
+        
+        console.log(`[Track Debug] raceTrack clientHeight: ${raceTrackHeight}, calculated raceRiver height: ${this.trackHeight}`);
+        console.log(`[Track Debug] raceTrack width: ${trackElement.clientWidth}`);
+        
+        // Debug bank sizes
+        const bankTop = document.getElementById('bankTop');
+        const bankBot = document.getElementById('bankBot');
+        if (bankTop) console.log(`[Track Debug] bankTop clientHeight: ${bankTop.clientHeight}`);
+        if (bankBot) console.log(`[Track Debug] bankBot clientHeight: ${bankBot.clientHeight}`);
         
         // Tính trackLength dựa trên tốc độ thực tế với delta time normalization
         // baseSpeed: 3.2-4.0 px/frame (avg 3.6) @ 60 FPS với deltaTime = 1.0
@@ -1066,18 +1086,39 @@ class Game {
         this.cameraOffset = 0;
         this.backgroundOffset = 0;
         
+        // Set initial CSS variable for duck size
+        const initialDuckHeight = this.trackHeight * 0.5;
+        trackElement.style.setProperty('--duck-size', `${initialDuckHeight}px`);
+        
         // Add resize handler for responsive scaling
         this.resizeHandler = () => {
             this.viewportWidth = trackElement.clientWidth || 1200;
-            this.trackHeight = this.trackContainer.clientHeight || 470;
+            const raceTrackHeight = trackElement.clientHeight || 250;
+            this.trackHeight = raceTrackHeight * 0.6; // race-river is 60% of race-track
+            
+            // Update CSS variable for duck size
+            const duckHeight = this.trackHeight * 0.5;
+            trackElement.style.setProperty('--duck-size', `${duckHeight}px`);
+            
             if (this.raceStarted && !this.raceFinished) {
                 this.redistributeDucks();
             }
         };
         window.addEventListener('resize', this.resizeHandler);
 
-        this.trackContainer.innerHTML = '';
+        // Clear only duck elements, preserve water-flow, water-ripples, fish-layer
+        const duckElements = this.trackContainer.querySelectorAll('.duck-element');
+        duckElements.forEach(el => el.remove());
         this.duckElements.clear();
+
+        // Hide fish and water effects when race starts
+        const fishLayer = document.getElementById('fishLayer');
+        const waterFlow = this.trackContainer.querySelector('.water-flow');
+        const waterRipples = this.trackContainer.querySelector('.water-ripples');
+        
+        if (fishLayer) fishLayer.style.display = 'none';
+        if (waterFlow) waterFlow.style.display = 'none';
+        if (waterRipples) waterRipples.style.display = 'none';
 
         this.ducks = [];
         
@@ -1201,7 +1242,6 @@ class Game {
         if (raceNumber) raceNumber.textContent = `#${this.currentRaceNumber}`;
         if (raceStatus) raceStatus.textContent = 'Waiting to start...';
         if (timeLeft) timeLeft.textContent = `${this.raceDuration}s`;
-        if (pauseBtn) pauseBtn.disabled = true;
         if (fullscreenBtn) fullscreenBtn.textContent = '🚀 Start';
 
         this.soundManager.init();
@@ -1286,21 +1326,29 @@ class Game {
         // Update UI elements
         const raceStatus = document.getElementById('raceStatus');
         const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const startBtn = document.getElementById('startRaceBtn');
+        const controlStartBtn = document.getElementById('controlStartBtn');
         
         if (raceStatus) raceStatus.textContent = 'Racing!';
         if (pauseBtn) pauseBtn.disabled = false;
+        if (resumeBtn) resumeBtn.disabled = true;
         if (fullscreenBtn) fullscreenBtn.textContent = '🔲 Fullscreen';
+        
+        // Disable start buttons during race
+        if (startBtn) startBtn.disabled = true;
+        if (controlStartBtn) controlStartBtn.disabled = true;
         
         // Update race number display
         safeElementAction('raceNumber', el => el.textContent = `#${this.currentRaceNumber}`);
     }
 
     createDuckElement(duck, index) {
-        // Duck size is 150px, add padding at top/bottom
-        const duckHeight = 150;
-        const topPadding = 10;
-        const bottomPadding = 10;
+        // Duck size scales with track height (50% of track height)
+        const duckHeight = this.trackHeight * 0.5;
+        const topPadding = this.trackHeight * 0.02; // 2% padding
+        const bottomPadding = this.trackHeight * 0.02; // 2% padding
         const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
         
         // Calculate lane height to fit all ducks within bounds
@@ -1319,13 +1367,9 @@ class Game {
             img.src = this.duckImages[iconIndex][0].src;
             img.className = 'duck-icon';
             img.alt = duck.name;
-            img.style.width = '150px';
-            img.style.height = '150px';
             duckEl.appendChild(img);
         } else {
             const circle = document.createElement('div');
-            circle.style.width = '150px';
-            circle.style.height = '150px';
             circle.style.borderRadius = '50%';
             circle.style.background = duck.color;
             duckEl.appendChild(circle);
@@ -1341,9 +1385,9 @@ class Game {
     }
 
     redistributeDucks() {
-        const duckHeight = 150;
-        const topPadding = 10;
-        const bottomPadding = 10;
+        const duckHeight = this.trackHeight * 0.5;
+        const topPadding = this.trackHeight * 0.02;
+        const bottomPadding = this.trackHeight * 0.02;
         const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
         const laneHeight = availableHeight / (this.duckCount - 1);
         
@@ -1746,7 +1790,13 @@ class Game {
             
             if (shouldUpdate) {
                 const currentRank = this.rankings.findIndex(d => d.id === duck.id) + 1 || this.ducks.length;
-                duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime);
+                
+                // Check if we're in slowdown zone (within 500px of finish)
+                const leader = this.rankings[0];
+                const distanceToFinish = leader ? this.trackLength - leader.position : Infinity;
+                const inSlowdownZone = distanceToFinish <= 500;
+                
+                duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime, inSlowdownZone);
             } else {
                 // Lightweight update for off-screen ducks - only position
                 if (!duck.finished) {
@@ -1776,18 +1826,23 @@ class Game {
             let targetCameraOffset;
             let cameraMaxOffset;
             let cameraSpeed;
+            let backgroundSpeed = 15; // Default background scroll speed
             
             if (distanceToFinish <= 500) {
-                // When within 1000px of finish, move camera to center the finish line
+                // When within 500px of finish, gradually slow down camera and background
+                const slowdownFactor = distanceToFinish / 500; // 1.0 at 500px, 0.0 at finish
+                
+                // Gradually move camera to center the finish line
                 targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
-                // Allow camera to move beyond normal max to center the finish line
                 cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
-                // Slow down camera speed when approaching finish
-                cameraSpeed = 0.05;
+                
+                // Gradually slow down camera speed (from 0.1 to 0)
+                cameraSpeed = 0.1 * slowdownFactor;
+                
+                // Gradually slow down background (from 15 to 0)
+                backgroundSpeed = 15 * slowdownFactor;
                 
                 // Show finish line
-                // Position finish line so its left edge is at trackLength
-                // This way when duck.position >= trackLength, duck's left edge (nose) touches the line
                 const finishLine = document.getElementById('finishLine');
                 finishLine.classList.remove('hidden');
                 finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
@@ -1800,10 +1855,13 @@ class Game {
             
             this.cameraOffset += (targetCameraOffset - this.cameraOffset) * cameraSpeed;
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
+            
+            // Update background with variable speed
+            this.backgroundOffset += backgroundSpeed * this.deltaTime;
+        } else {
+            // If no leader or race not active, keep background moving
+            this.backgroundOffset += 15 * this.deltaTime;
         }
-
-        // Update background offset continuously (time-based)
-        this.backgroundOffset += 15 * this.deltaTime; // Constant scroll speed normalized to 60fps
         
         this.updateDuckPositions();
         this.updateBackgrounds();
@@ -1831,9 +1889,9 @@ class Game {
                 
                 // Lazy creation - only create element when duck enters viewport
                 if (!duckEl) {
-                    const duckHeight = 150;
-                    const topPadding = 10;
-                    const bottomPadding = 10;
+                    const duckHeight = this.trackHeight * 0.5;
+                    const topPadding = this.trackHeight * 0.02;
+                    const bottomPadding = this.trackHeight * 0.02;
                     const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
                     const laneHeight = availableHeight / (this.duckCount - 1);
                     const index = this.ducks.indexOf(duck);
@@ -1849,13 +1907,13 @@ class Game {
                         img.src = this.duckImages[iconIndex][0].src;
                         img.className = 'duck-icon';
                         img.alt = duck.name;
-                        img.style.width = '150px';
-                        img.style.height = '150px';
+                        img.style.width = `${duckHeight}px`;
+                        img.style.height = `${duckHeight}px`;
                         duckEl.appendChild(img);
                     } else {
                         const circle = document.createElement('div');
-                        circle.style.width = '150px';
-                        circle.style.height = '150px';
+                        circle.style.width = `${duckHeight}px`;
+                        circle.style.height = `${duckHeight}px`;
                         circle.style.borderRadius = '50%';
                         circle.style.background = duck.color;
                         duckEl.appendChild(circle);
@@ -2249,7 +2307,9 @@ class Game {
         safeElementAction('finishLine', el => el.classList.add('hidden'));
         
         if (this.trackContainer) {
-            this.trackContainer.innerHTML = '';
+            // Clear only duck elements, preserve water-flow, water-ripples, fish-layer
+            const duckElements = this.trackContainer.querySelectorAll('.duck-element');
+            duckElements.forEach(el => el.remove());
         }
         
         // Display remaining racers count
@@ -2468,7 +2528,9 @@ class Game {
         }
         
         if (this.trackContainer) {
-            this.trackContainer.innerHTML = '';
+            // Clear only duck elements, preserve water-flow, water-ripples, fish-layer
+            const duckElements = this.trackContainer.querySelectorAll('.duck-element');
+            duckElements.forEach(el => el.remove());
         }
 
         document.getElementById('resultPanel').classList.add('hidden');

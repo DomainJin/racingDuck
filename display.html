@@ -84,26 +84,17 @@
             font-family: 'Courier New', monospace;
         }
         
-        /* Race track full screen with 16:9 aspect ratio */
+        /* Race track full screen with 20:5 aspect ratio */
         .race-track {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             width: 100vw;
-            height: calc(100vw * 9 / 16); /* 16:9 aspect ratio */
+            height: calc(100vw * 5 / 20); /* 20:5 aspect ratio (4:1) */
             max-height: 100vh;
-            max-width: calc(100vh * 16 / 9);
-        }
-        
-        /* Ensure race elements scale properly */
-        .race-river {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .bank-top, .bank-bot {
-            width: 100%;
+            max-width: calc(100vh * 20 / 5);
+            z-index: 10;
         }
         
         /* Loading indicator */
