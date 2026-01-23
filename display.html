@@ -34,10 +34,17 @@
         /* Allow result-panel to show on display */
         .result-panel {
             display: none; /* hidden by default */
+            background: transparent !important; /* Transparent by default */
         }
         
         .result-panel.fullscreen {
             display: flex !important;
+        }
+        
+        /* Hide pseudo-elements for result-panel on display */
+        .result-panel::before,
+        .result-panel::after {
+            display: none !important;
         }
         
         /* Race info at top */
@@ -66,15 +73,20 @@
             margin-right: 10px;
         }
         
-        /* Big timer */
+        /* Big timer - Fixed in bank-top at 50% height */
         .big-timer {
-            position: fixed;
-            top: 100px;
-            right: 30px;
-            background: rgba(0,0,0,0.85);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: transparent;
             padding: 20px 30px;
             border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            height: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
         }
         
         .big-timer .timer-display {
@@ -97,22 +109,148 @@
             z-index: 10;
         }
         
-        /* Loading indicator */
+        /* Loading indicator - scaled to match race-track */
         .loading-display {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            width: 100vw;
+            height: calc(100vw * 5 / 20); /* Match race-track aspect ratio */
+            max-height: 100vh;
+            max-width: calc(100vh * 20 / 5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             color: white;
             font-size: 32px;
             z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                        inset 0 0 50px rgba(0, 0, 0, 0.3),
+                        0 0 50px rgba(102, 126, 234, 0.3);
         }
         
         .loading-display h1 {
             color: #FFD700;
-            font-size: 48px;
+            font-size: 3vw; /* Responsive to viewport width */
             margin-bottom: 20px;
+        }
+        
+        .loading-display p {
+            font-size: 1.5vw; /* Responsive to viewport width */
+        }
+        
+        /* Victory popup scaled to match race-track - ENTIRE POPUP */
+        .victory-popup {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 100vw !important;
+            height: calc(100vw * 5 / 20) !important; /* Match race-track aspect ratio */
+            max-height: 100vh !important;
+            max-width: calc(100vh * 20 / 5) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        
+        /* Victory overlay - fill entire popup container */
+        .victory-overlay {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 20px !important;
+        }
+        
+        /* Victory content - circular shape, diameter = height of race-track */
+        .victory-content {
+            width: auto !important;
+            height: 100% !important;
+            aspect-ratio: 1 / 1 !important; /* Force square based on height */
+            border-radius: 50% !important; /* Make it circular */
+            padding: 0 !important;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                        inset 0 0 50px rgba(0, 0, 0, 0.3),
+                        0 0 50px rgba(102, 126, 234, 0.3) !important;
+            overflow: visible !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        
+        /* Victory header - compact */
+        .victory-header {
+            flex-shrink: 0 !important;
+            margin-bottom: 1% !important;
+        }
+        
+        .victory-header h1 {
+            font-size: 1vw !important;
+            margin: 0 !important;
+            animation: none !important;
+        }
+        
+        /* Victory body - vertical layout for circular shape */
+        .victory-body {
+            padding: 40px !important;
+            margin: 0 !important;
+            margin-bottom: 30px !important;
+            border-radius: 50% !important;
+            width: auto !important;
+            height: 80% !important;
+            aspect-ratio: 1 / 1 !important;
+            flex-shrink: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        
+        /* Winner icon - compact */
+        .winner-icon {
+            width: 6vw !important;
+            height: 6vw !important;
+            max-width: 80px !important;
+            max-height: 80px !important;
+            margin: 0 auto 1% !important;
+            flex-shrink: 0 !important;
+            animation: none !important;
+        }
+        
+        .winner-name {
+            font-size: 1.8vw !important;
+            margin: 1% 0 !important;
+            text-align: center !important;
+        }
+        
+        .winner-stats {
+            font-size: 1vw !important;
+            line-height: 1.4 !important;
+            text-align: center !important;
+        }
+        
+        .winner-stats p {
+            margin: 0.5% 0 !important;
+        }
+        
+        /* Victory footer - compact */
+        .victory-footer {
+            margin-top: 1% !important;
+            flex-shrink: 0 !important;
+        }
+        
+        .victory-footer .btn {
+            font-size: 0.9vw !important;
+            padding: 0.8% 2% !important;
         }
     </style>
 </head>
@@ -130,14 +268,14 @@
         
         <!-- No race info on display - all controls are on index.html -->
 
-        <!-- Big Timer Display -->
-        <div class="big-timer hidden" id="bigTimer">
-            <div class="timer-display">00:00:00</div>
-        </div>
-
         <!-- Race Track -->
         <div class="race-track" id="raceTrack">
-            <div class="bank-top" id="bankTop"></div>
+            <div class="bank-top" id="bankTop">
+                <!-- Big Timer Display - Fixed inside bank-top at 50% height -->
+                <div class="big-timer hidden" id="bigTimer">
+                    <div class="timer-display">00:00:00</div>
+                </div>
+            </div>
             <div class="race-river" id="raceRiver">
                 <div class="water-flow"></div>
                 <div class="water-ripples"></div>
@@ -160,6 +298,9 @@
             <div id="resultMessage"></div>
         </div>
     </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
 
     <!-- Victory Popup -->
     <div class="victory-popup hidden" id="victoryPopup">
@@ -322,6 +463,19 @@
                     case 'RESET_RACE':
                         handleResetRace();
                         break;
+                    case 'SOUND_TOGGLE_CHANGED':
+                        console.log('🔊 Sound toggle changed:', data.enabled);
+                        if (displayGame && displayGame.soundManager) {
+                            displayGame.soundManager.setEnabled(data.enabled);
+                        }
+                        break;
+                    case 'CUSTOM_AUDIO_LOADED':
+                        console.log('🎵 Custom audio received:', data.fileName);
+                        if (displayGame && displayGame.soundManager) {
+                            displayGame.soundManager.loadAudioFromBase64(data.audioData, data.fileName);
+                        }
+                        break;
+                        break;
                     case 'PAUSE_RACE':
                         handlePauseRace();
                         break;
@@ -330,6 +484,14 @@
                         break;
                     case 'SHOW_RESULTS':
                         handleShowResults(data);
+                        break;
+                    case 'UPDATE_DISPLAY_SETTINGS':
+                        console.log('🎨 UPDATE_DISPLAY_SETTINGS received:', data);
+                        handleUpdateDisplaySettings(data);
+                        break;
+                    case 'UPDATE_RESULT_PANEL_SETTINGS':
+                        console.log('🎨 UPDATE_RESULT_PANEL_SETTINGS received:', data);
+                        handleUpdateResultPanelSettings(data);
                         break;
                     case 'REQUEST_ICONS_STATUS':
                         // Control is requesting icon status - reply immediately
@@ -386,9 +548,9 @@
         }
         
         function startRaceWithData(data) {
-            const { duckCount, raceDuration, theme, duckNames, duckImages, startTime } = data;
+            const { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNames, duckImages, startTime } = data;
             
-            console.log('🎮 Display: startRaceWithData called with:', { duckCount, raceDuration, theme, duckNamesCount: duckNames?.length });
+            console.log('🎮 Display: startRaceWithData called with:', { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNamesCount: duckNames?.length });
             
             // Verify displayGame exists
             if (!displayGame) {
@@ -444,12 +606,16 @@
             // Initialize race
             displayGame.duckCount = duckCount;
             displayGame.raceDuration = raceDuration;
+            displayGame.raceMode = raceMode || 'normal'; // Set race mode from control
+            displayGame.winnerCount = winnerCount || 1; // Set winner count from control
+            displayGame.gameSpeed = gameSpeed || 1.0; // Set game speed from control
+            displayGame.winners = []; // Reset winners array
             displayGame.currentTheme = theme;
             if (duckNames && duckNames.length > 0) {
                 displayGame.activeDuckNames = duckNames;
             }
             
-            console.log('Display: Setting up race with', duckCount, 'ducks');
+            console.log('Display: Setting up race - Mode:', displayGame.raceMode, 'WinnerCount:', displayGame.winnerCount, 'Speed:', displayGame.gameSpeed + 'x', 'Ducks:', duckCount);
             try {
                 displayGame.setupRace();
                 console.log('✅ Display: setupRace() completed successfully');
@@ -496,6 +662,12 @@
         function handleShowWinner(data) {
             const { winner, finishTime } = data;
             if (displayGame && winner) {
+                // Don't show popup if in Top N mode
+                if (displayGame.raceMode === 'topN') {
+                    console.log('Display: Top N mode - skipping victory popup');
+                    return;
+                }
+                
                 // If finishTime provided, set it on winner object for display
                 if (finishTime !== undefined) {
                     winner._displayFinishTime = finishTime;
@@ -622,6 +794,109 @@
                 console.log('✅ Results displayed in fullscreen');
             }
         }
+        
+        function handleUpdateDisplaySettings(data) {
+            console.log('🎨 Applying display settings:', data);
+            
+            const raceTrack = document.getElementById('raceTrack');
+            if (!raceTrack) {
+                console.error('Race track element not found');
+                return;
+            }
+            
+            // Apply background settings based on type
+            if (data.type === 'default') {
+                // Reset to default
+                raceTrack.style.background = '';
+                raceTrack.style.backgroundImage = '';
+                raceTrack.style.backgroundColor = '';
+                console.log('✓ Background reset to default');
+            } else if (data.type === 'color') {
+                // Apply solid color
+                raceTrack.style.backgroundImage = 'none';
+                raceTrack.style.backgroundColor = data.color || '#1a1a2e';
+                console.log('✓ Background color applied:', data.color);
+            } else if (data.type === 'image' && data.image) {
+                // Apply custom image
+                raceTrack.style.backgroundColor = '';
+                raceTrack.style.backgroundImage = `url('${data.image}')`;
+                raceTrack.style.backgroundSize = 'cover';
+                raceTrack.style.backgroundPosition = 'center';
+                raceTrack.style.backgroundRepeat = 'no-repeat';
+                console.log('✓ Background image applied');
+            }
+        }
+        
+        function handleUpdateResultPanelSettings(data) {
+            console.log('🎨 Applying result panel settings on display:', data);
+            
+            const resultPanel = document.getElementById('resultPanel');
+            if (!resultPanel) {
+                console.error('Result panel element not found on display');
+                return;
+            }
+            
+            // Apply background settings with !important to override CSS
+            if (data.type === 'default') {
+                // Reset to default
+                resultPanel.style.removeProperty('background');
+                resultPanel.style.removeProperty('background-image');
+                resultPanel.style.removeProperty('background-size');
+                resultPanel.style.removeProperty('background-position');
+                resultPanel.style.removeProperty('background-repeat');
+                resultPanel.classList.remove('custom-background');
+                console.log('✓ Result panel background reset to default');
+            } else {
+                // Add class to hide pseudo-elements
+                resultPanel.classList.add('custom-background');
+                
+                if (data.type === 'color') {
+                    resultPanel.style.setProperty('background', data.color, 'important');
+                    resultPanel.style.removeProperty('background-image');
+                    console.log('✓ Result panel color applied:', data.color);
+                } else if (data.type === 'image' && data.image) {
+                    resultPanel.style.setProperty('background-image', `url(${data.image})`, 'important');
+                    resultPanel.style.setProperty('background-size', 'cover', 'important');
+                    resultPanel.style.setProperty('background-position', 'center', 'important');
+                    resultPanel.style.setProperty('background-repeat', 'no-repeat', 'important');
+                    resultPanel.style.setProperty('background-color', 'transparent', 'important');
+                    console.log('✓ Result panel image applied');
+                }
+            }
+        }
+        
+        // Load saved settings on page load
+        window.addEventListener('load', () => {
+            // Load display background settings
+            const savedType = localStorage.getItem('displayBackgroundType');
+            if (savedType && savedType !== 'default') {
+                const savedColor = localStorage.getItem('displayBackgroundColor');
+                const savedImage = localStorage.getItem('displayBackgroundImage');
+                
+                handleUpdateDisplaySettings({
+                    type: savedType,
+                    color: savedColor,
+                    image: savedImage
+                });
+                
+                console.log('✓ Loaded saved display settings from localStorage');
+            }
+            
+            // Load result panel background settings
+            const resultPanelType = localStorage.getItem('resultPanelBackgroundType');
+            if (resultPanelType && resultPanelType !== 'default') {
+                const resultPanelColor = localStorage.getItem('resultPanelBackgroundColor');
+                const resultPanelImage = localStorage.getItem('resultPanelBackgroundImage');
+                
+                handleUpdateResultPanelSettings({
+                    type: resultPanelType,
+                    color: resultPanelColor,
+                    image: resultPanelImage
+                });
+                
+                console.log('✓ Loaded saved result panel settings from localStorage');
+            }
+        });
     </script>
 </body>
 </html>

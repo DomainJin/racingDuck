@@ -21,6 +21,8 @@ class SoundManager {
         this.initialized = false;
         this.raceLoopInterval = null;
         this.crowdNoiseInterval = null;
+        this.customAudioBuffer = null; // For loaded mp3/wav files
+        this.customAudioSource = null; // Current playing source
     }
 
     init() {
@@ -30,6 +32,57 @@ class SoundManager {
             this.initialized = true;
         } catch (e) {
             console.log('Audio not supported');
+        }
+    }
+
+    // Load audio file (mp3, wav, ogg)
+    async loadAudioFile(file) {
+        if (!this.initialized) this.init();
+        if (!this.context) {
+            console.error('AudioContext not available');
+            return false;
+        }
+
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    this.customAudioBuffer = await this.context.decodeAudioData(arrayBuffer);
+                    console.log('✅ Audio file loaded successfully:', file.name, this.customAudioBuffer.duration + 's');
+                    resolve(true);
+                } catch (error) {
+                    console.error('❌ Error decoding audio file:', error);
+                    reject(error);
+                }
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // Load audio from base64 string (for BroadcastChannel sharing)
+    async loadAudioFromBase64(base64Data, fileName) {
+        if (!this.initialized) this.init();
+        if (!this.context) {
+            console.error('AudioContext not available');
+            return false;
+        }
+
+        try {
+            // Convert base64 to ArrayBuffer
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            this.customAudioBuffer = await this.context.decodeAudioData(bytes.buffer);
+            console.log('✅ Audio loaded from base64:', fileName, this.customAudioBuffer.duration + 's');
+            return true;
+        } catch (error) {
+            console.error('❌ Error decoding base64 audio:', error);
+            return false;
         }
     }
 
@@ -80,6 +133,12 @@ class SoundManager {
     startRacingAmbiance() {
         if (!this.enabled || !this.initialized) return;
         
+        // If custom audio is loaded, play it instead of procedural sounds
+        if (this.customAudioBuffer) {
+            this.playCustomAudio();
+            return;
+        }
+        
         // Horse galloping loop - continuous hooves sound
         this.raceLoopInterval = setInterval(() => {
             // Multiple horses galloping
@@ -101,6 +160,23 @@ class SoundManager {
         }, 800);
     }
 
+    // Play custom loaded audio in loop
+    playCustomAudio() {
+        if (!this.customAudioBuffer || !this.context) return;
+        
+        // Stop previous source if exists
+        if (this.customAudioSource) {
+            this.customAudioSource.stop();
+        }
+        
+        this.customAudioSource = this.context.createBufferSource();
+        this.customAudioSource.buffer = this.customAudioBuffer;
+        this.customAudioSource.loop = true; // Loop the audio
+        this.customAudioSource.connect(this.context.destination);
+        this.customAudioSource.start(0);
+        console.log('🔊 Playing custom audio in loop');
+    }
+
     // Stop racing ambiance
     stopRacingAmbiance() {
         if (this.raceLoopInterval) {
@@ -110,6 +186,11 @@ class SoundManager {
         if (this.crowdNoiseInterval) {
             clearInterval(this.crowdNoiseInterval);
             this.crowdNoiseInterval = null;
+        }
+        // Stop custom audio if playing
+        if (this.customAudioSource) {
+            this.customAudioSource.stop();
+            this.customAudioSource = null;
         }
     }
 
@@ -322,12 +403,22 @@ class Duck {
             });
             
             // Visual duck nose is ~FINISH_LINE_OFFSET px before the right edge of 150px icon
-            // Allow duck to pass finish line by checking when left edge crosses
-            if (this.position >= this.trackLength - FINISH_LINE_OFFSET) {
-                this.position = this.trackLength - FINISH_LINE_OFFSET;
-                this.speed = 0; // Stop completely at finish line
+            // Allow duck to pass finish line and continue with deceleration (inertia)
+            if (this.position >= this.trackLength - FINISH_LINE_OFFSET && !this.finished) {
                 this.finished = true;
                 this.finishTime = Date.now();
+                // Don't stop immediately - let duck continue with gradual slowdown for realism
+                // Set target speed to slowly decelerate
+                this.targetSpeed = this.speed * 0.3; // Reduce to 30% of current speed
+            }
+            
+            // Continue moving even after finishing (with deceleration) for visual realism
+            // Will be stopped by race end logic in animate()
+        } else {
+            // Duck has finished - continue with gradual deceleration
+            this.speed *= 0.95; // Gradually slow down (95% each frame)
+            if (this.speed > 0.1) {
+                this.position += this.speed * deltaTime;
             }
         }
     }
@@ -356,6 +447,10 @@ class Game {
         this.ducks = [];
         this.duckCount = 300;
         this.raceDuration = 30;
+        this.gameSpeed = 1.0; // Game speed multiplier: 0.25x to 3x
+        this.raceMode = 'normal'; // 'normal' or 'topN'
+        this.winnerCount = 3; // For topN mode
+        this.winners = []; // Array to store multiple winners
         
         this.trackContainer = null;
         this.duckElements = new Map();
@@ -370,6 +465,82 @@ class Game {
         this.rankings = [];
         this.soundManager = new SoundManager();
         
+        // Setup sound toggle listener in index.html (not display mode)
+        if (!isDisplayMode) {
+            setTimeout(() => {
+                const soundToggleEl = document.getElementById('soundToggle');
+                const soundToggleControlEl = document.getElementById('soundToggleControl');
+                
+                // Sync both checkboxes
+                const updateSound = (enabled) => {
+                    this.soundManager.setEnabled(enabled);
+                    // Sync both checkboxes
+                    if (soundToggleEl) soundToggleEl.checked = enabled;
+                    if (soundToggleControlEl) soundToggleControlEl.checked = enabled;
+                    // Broadcast to display.html
+                    if (this.displayChannel) {
+                        this.displayChannel.postMessage({
+                            type: 'SOUND_TOGGLE_CHANGED',
+                            data: { enabled }
+                        });
+                        console.log('📢 Sound toggle changed:', enabled, '- sent to display');
+                    }
+                };
+                
+                if (soundToggleEl) {
+                    soundToggleEl.addEventListener('change', (e) => {
+                        updateSound(e.target.checked);
+                    });
+                }
+                
+                if (soundToggleControlEl) {
+                    soundToggleControlEl.addEventListener('change', (e) => {
+                        updateSound(e.target.checked);
+                    });
+                }
+                
+                // Setup custom sound file input
+                const customSoundFileEl = document.getElementById('customSoundFile');
+                if (customSoundFileEl) {
+                    customSoundFileEl.addEventListener('change', async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        console.log('Loading audio file:', file.name);
+                        try {
+                            await this.soundManager.loadAudioFile(file);
+                            alert('✓ Custom sound loaded: ' + file.name);
+                            
+                            // Share with display.html via BroadcastChannel
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const arrayBuffer = e.target.result;
+                                // Convert to base64 for transmission
+                                const base64 = btoa(
+                                    new Uint8Array(arrayBuffer)
+                                        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+                                );
+                                
+                                if (this.displayChannel) {
+                                    this.displayChannel.postMessage({
+                                        type: 'CUSTOM_AUDIO_LOADED',
+                                        data: { 
+                                            audioData: base64,
+                                            fileName: file.name
+                                        }
+                                    });
+                                    console.log('📢 Custom audio sent to display:', file.name);
+                                }
+                            };
+                            reader.readAsArrayBuffer(file);
+                        } catch (error) {
+                            alert('❌ Error loading audio file: ' + error.message);
+                        }
+                    });
+                }
+            }, 100);
+        }
+        
         // Performance optimization - viewport culling
         this.viewportBuffer = 500; // Render ducks 500px outside viewport
         this.visibleDucks = new Set(); // Track which ducks are currently visible
@@ -381,6 +552,8 @@ class Game {
         this.deltaTime = 1.0; // Multiplier for frame-independent movement
         
         this.cameraOffset = 0;
+        this.smoothCameraTarget = 0; // Smooth camera target for lerping
+        this.lastCameraOffset = 0; // Track last camera position to prevent backwards movement
         this.backgroundOffset = 0;
         this.viewportWidth = 0;
         this.trackHeight = 0;
@@ -512,6 +685,252 @@ class Game {
     //     ... (code kept for reference but not used)
     // }
 
+    // Result Panel Appearance Settings
+    getPrizeTitle() {
+        const savedTitle = localStorage.getItem('customPrizeTitle');
+        return savedTitle || 'Prize Results';
+    }
+
+    savePrizeTitle() {
+        const titleInput = document.getElementById('prizeTitleInput');
+        if (titleInput) {
+            const title = titleInput.value.trim() || 'Prize Results';
+            localStorage.setItem('customPrizeTitle', title);
+        }
+    }
+
+    savePrizeNames() {
+        const prizeNames = {};
+        for (let i = 1; i <= 10; i++) {
+            const input = document.getElementById(`prizeName${i}`);
+            if (input && input.value.trim()) {
+                prizeNames[i] = input.value.trim();
+            }
+        }
+        localStorage.setItem('customPrizeNames', JSON.stringify(prizeNames));
+    }
+
+    getPrizeName(position) {
+        const savedNames = localStorage.getItem('customPrizeNames');
+        if (savedNames) {
+            try {
+                const prizeNames = JSON.parse(savedNames);
+                return prizeNames[position] || `Prize ${position}`;
+            } catch (e) {
+                return `Prize ${position}`;
+            }
+        }
+        return `Prize ${position}`;
+    }
+
+    loadPrizeNames() {
+        const savedNames = localStorage.getItem('customPrizeNames');
+        if (savedNames) {
+            try {
+                const prizeNames = JSON.parse(savedNames);
+                for (let i = 1; i <= 10; i++) {
+                    const input = document.getElementById(`prizeName${i}`);
+                    if (input && prizeNames[i]) {
+                        input.value = prizeNames[i];
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load prize names:', e);
+            }
+        }
+    }
+
+    toggleResultPanelSettings() {
+        const container = document.getElementById('resultPanelSettingsContainer');
+        if (container) {
+            container.classList.toggle('hidden');
+        }
+    }
+
+    toggleResultBackground() {
+        const bgType = document.getElementById('resultBgType').value;
+        const bgColorGroup = document.getElementById('resultBgColorGroup');
+        const bgImageGroup = document.getElementById('resultBgImageGroup');
+        
+        // Hide all groups first
+        if (bgColorGroup) bgColorGroup.style.display = 'none';
+        if (bgImageGroup) bgImageGroup.style.display = 'none';
+        
+        // Show relevant group
+        if (bgType === 'color' && bgColorGroup) {
+            bgColorGroup.style.display = 'block';
+        } else if (bgType === 'image' && bgImageGroup) {
+            bgImageGroup.style.display = 'block';
+        }
+    }
+    
+    loadResultBackgroundImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imageData = e.target.result;
+            // Save to localStorage
+            localStorage.setItem('resultPanelBackgroundImage', imageData);
+            console.log('Result panel background image loaded');
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    applyResultPanelSettings() {
+        // Save custom prize title and prize names
+        this.savePrizeTitle();
+        this.savePrizeNames();
+        
+        const bgType = document.getElementById('resultBgType').value;
+        const bgColor = document.getElementById('resultBgColor').value;
+        const bgImage = localStorage.getItem('resultPanelBackgroundImage');
+        
+        const resultPanel = document.getElementById('resultPanel');
+        if (!resultPanel) {
+            alert('Result panel not found!');
+            return;
+        }
+        
+        // Save settings to localStorage
+        localStorage.setItem('resultPanelBackgroundType', bgType);
+        localStorage.setItem('resultPanelBackgroundColor', bgColor);
+        
+        // Apply settings immediately with !important to override CSS
+        if (bgType === 'default') {
+            resultPanel.style.removeProperty('background');
+            resultPanel.style.removeProperty('background-image');
+            resultPanel.style.removeProperty('background-size');
+            resultPanel.style.removeProperty('background-position');
+            resultPanel.style.removeProperty('background-repeat');
+            // Hide pseudo-elements
+            resultPanel.classList.remove('custom-background');
+        } else {
+            // Add class to hide pseudo-elements
+            resultPanel.classList.add('custom-background');
+            
+            if (bgType === 'color') {
+                resultPanel.style.setProperty('background', bgColor, 'important');
+                resultPanel.style.removeProperty('background-image');
+            } else if (bgType === 'image' && bgImage) {
+                resultPanel.style.setProperty('background-image', `url(${bgImage})`, 'important');
+                resultPanel.style.setProperty('background-size', 'cover', 'important');
+                resultPanel.style.setProperty('background-position', 'center', 'important');
+                resultPanel.style.setProperty('background-repeat', 'no-repeat', 'important');
+                resultPanel.style.setProperty('background-color', 'transparent', 'important');
+            }
+        }
+        
+        // Send settings to display via BroadcastChannel
+        if (this.displayChannel) {
+            const settings = {
+                type: bgType,
+                color: bgColor,
+                image: bgImage
+            };
+            
+            this.displayChannel.postMessage({
+                type: 'UPDATE_RESULT_PANEL_SETTINGS',
+                data: settings
+            });
+            
+            console.log('Result panel settings sent to display:', settings);
+        }
+        
+        console.log('Result panel settings applied:', { bgType, bgColor });
+        alert('✓ Result panel background updated!');
+    }
+    
+    resetResultPanelSettings() {
+        const resultPanel = document.getElementById('resultPanel');
+        
+        // Reset to default
+        document.getElementById('resultBgType').value = 'default';
+        document.getElementById('resultBgColor').value = '#1a1a2e';
+        
+        // Reset prize title input
+        const titleInput = document.getElementById('prizeTitleInput');
+        if (titleInput) titleInput.value = 'Prize Results';
+        
+        // Reset prize name inputs
+        for (let i = 1; i <= 10; i++) {
+            const input = document.getElementById(`prizeName${i}`);
+            if (input) input.value = '';
+        }
+        
+        // Clear localStorage
+        localStorage.removeItem('resultPanelBackgroundType');
+        localStorage.removeItem('resultPanelBackgroundColor');
+        localStorage.removeItem('resultPanelBackgroundImage');
+        localStorage.removeItem('customPrizeTitle');
+        localStorage.removeItem('customPrizeNames');
+        
+        // Reset panel style completely
+        if (resultPanel) {
+            resultPanel.style.removeProperty('background');
+            resultPanel.style.removeProperty('background-image');
+            resultPanel.style.removeProperty('background-size');
+            resultPanel.style.removeProperty('background-position');
+            resultPanel.style.removeProperty('background-repeat');
+            resultPanel.style.removeProperty('background-color');
+            resultPanel.classList.remove('custom-background');
+        }
+        
+        // Hide all option groups
+        this.toggleResultBackground();
+        
+        // Send reset to display
+        if (this.displayChannel) {
+            this.displayChannel.postMessage({
+                type: 'UPDATE_RESULT_PANEL_SETTINGS',
+                data: { type: 'default' }
+            });
+            console.log('Result panel reset sent to display');
+        }
+        
+        console.log('Result panel settings reset to default');
+        alert('✓ Settings reset to default!');
+    }
+    
+    // Load saved result panel settings on page load
+    loadResultPanelSettings() {
+        // Load custom prize title
+        const savedTitle = localStorage.getItem('customPrizeTitle');
+        const titleInput = document.getElementById('prizeTitleInput');
+        if (titleInput && savedTitle) {
+            titleInput.value = savedTitle;
+        }
+        
+        // Load custom prize names
+        this.loadPrizeNames();
+        
+        const bgType = localStorage.getItem('resultPanelBackgroundType');
+        const bgColor = localStorage.getItem('resultPanelBackgroundColor');
+        const bgImage = localStorage.getItem('resultPanelBackgroundImage');
+        
+        if (!bgType || bgType === 'default') return;
+        
+        const resultPanel = document.getElementById('resultPanel');
+        if (!resultPanel) return;
+        
+        // Add class to hide pseudo-elements
+        resultPanel.classList.add('custom-background');
+        
+        // Apply saved settings with !important
+        if (bgType === 'color' && bgColor) {
+            resultPanel.style.setProperty('background', bgColor, 'important');
+        } else if (bgType === 'image' && bgImage) {
+            resultPanel.style.setProperty('background-image', `url(${bgImage})`, 'important');
+            resultPanel.style.setProperty('background-size', 'cover', 'important');
+            resultPanel.style.setProperty('background-position', 'center', 'important');
+            resultPanel.style.setProperty('background-repeat', 'no-repeat', 'important');
+            resultPanel.style.setProperty('background-color', 'transparent', 'important');
+        }
+        
+        console.log('Loaded saved result panel settings:', { bgType, bgColor });
+    }
+
     loadStats() {
         const saved = localStorage.getItem('duckRaceStats');
         if (saved) {
@@ -607,6 +1026,24 @@ class Game {
         this.detectAndLoadDuckImages();
     }
 
+    toggleRaceMode() {
+        const raceModeEl = document.getElementById('raceMode');
+        const winnerCountGroup = document.getElementById('winnerCountGroup');
+        
+        if (raceModeEl && winnerCountGroup) {
+            if (raceModeEl.value === 'topN') {
+                winnerCountGroup.classList.remove('hidden');
+            } else {
+                winnerCountGroup.classList.add('hidden');
+            }
+        }
+    }
+    
+    updateGameSpeed(speed) {
+        this.gameSpeed = speed;
+        console.log(`🎮 Game speed updated to: ${speed}x`);
+    }
+
     // Loading UI helper methods
     showLoading(message, progress) {
         const loadingContainer = document.getElementById('loadingContainer');
@@ -629,6 +1066,56 @@ class Game {
     hideLoading() {
         const loadingContainer = document.getElementById('loadingContainer');
         if (loadingContainer) loadingContainer.classList.add('hidden');
+    }
+
+    // Toast Notification System
+    showToastNotification(winner, position) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+
+        // Get position suffix (1st, 2nd, 3rd, 4th...)
+        const getPositionSuffix = (pos) => {
+            if (pos === 1) return '1st';
+            if (pos === 2) return '2nd';
+            if (pos === 3) return '3rd';
+            return `${pos}th`;
+        };
+
+        // Format time
+        const finishTime = winner.finishTime ? 
+            ((winner.finishTime - this.startTime) / 1000).toFixed(2) + 's' : 
+            'N/A';
+
+        // Create toast content
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <img src="${winner.iconSrc || this.duckImages[0]}" alt="Winner">
+            </div>
+            <div class="toast-content">
+                <p class="toast-position">🏆 ${getPositionSuffix(position)} Place!</p>
+                <p class="toast-name">${winner.name}</p>
+                <p class="toast-time">⏱️ ${finishTime}</p>
+            </div>
+        `;
+
+        // Add to container
+        container.appendChild(toast);
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            toast.classList.add('toast-fadeout');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+
+        console.log(`📢 Toast shown: ${getPositionSuffix(position)} - ${winner.name}`);
     }
 
     enableStartButton() {
@@ -963,10 +1450,47 @@ class Game {
             return;
         }
         
-        console.log('startRace: Starting race setup');
+        // Check if race is already running - prevent starting new race
+        if (this.raceStarted && !this.raceFinished) {
+            console.warn('Race is already running!');
+            alert('Cuộc đua đang chạy! Vui lòng đợi kết thúc hoặc nhấn Home để dừng.');
+            return;
+        }
         
-        // NEW: User opens display manually in separate tab
-        // Just proceed with race start
+        console.log('startRace: Setting up race (not starting yet)');
+        
+        // Only setup race, don't start automatically
+        // User must press Start button on control panel to begin
+        this.setupRaceOnly();
+    }
+    
+    setupRaceOnly() {
+        // Setup race without starting - just prepare everything
+        if (!this.isDisplayMode) {
+            this.setupRace();
+            
+            // Show control panel with enabled Start button
+            const raceInfo = document.getElementById('raceInfo');
+            const controlPanel = document.getElementById('controlPanel');
+            const controlStartBtn = document.getElementById('controlStartBtn');
+            const raceStatus = document.getElementById('raceStatus');
+            
+            if (raceInfo) raceInfo.classList.remove('hidden');
+            if (controlPanel) controlPanel.classList.remove('hidden');
+            if (controlStartBtn) {
+                controlStartBtn.disabled = false;
+                controlStartBtn.textContent = '🚀 Start';
+            }
+            if (raceStatus) raceStatus.textContent = 'Ready to start - Press Start button!';
+            
+            console.log('✅ Race setup complete. Press Start button to begin.');
+        }
+    }
+    
+    controlStartRace() {
+        // This is called when user presses Start button on control panel
+        // Now actually start the race
+        console.log('controlStartRace: Beginning race from control panel');
         this.proceedWithRaceStart();
     }
     
@@ -1007,6 +1531,9 @@ class Game {
             const raceData = {
                 duckCount: this.duckCount,
                 raceDuration: this.raceDuration,
+                raceMode: this.raceMode, // Send race mode to display
+                winnerCount: this.winnerCount, // Send winner count to display
+                gameSpeed: this.gameSpeed, // Send game speed to display
                 theme: this.currentTheme,
                 duckNames: [...this.activeDuckNames], // Clone array
                 startTime: this.startTime // Send synchronized start time
@@ -1032,11 +1559,40 @@ class Game {
             const duckCountEl = document.getElementById('duckCount');
             const raceDurationEl = document.getElementById('raceDuration');
             const soundToggleEl = document.getElementById('soundToggle');
+            const raceModeEl = document.getElementById('raceMode');
+            const winnerCountEl = document.getElementById('winnerCount');
+            const gameSpeedEl = document.getElementById('gameSpeed');
             
             if (duckCountEl) this.duckCount = parseInt(duckCountEl.value);
             if (raceDurationEl) this.raceDuration = parseInt(raceDurationEl.value) || 10;
-            if (soundToggleEl) this.soundManager.setEnabled(soundToggleEl.checked);
+            if (gameSpeedEl) this.gameSpeed = parseFloat(gameSpeedEl.value) || 1.0;
+            
+            // Get race mode settings
+            if (raceModeEl) this.raceMode = raceModeEl.value;
+            if (winnerCountEl && this.raceMode === 'topN') {
+                this.winnerCount = parseInt(winnerCountEl.value) || 3;
+            } else {
+                this.winnerCount = 1; // Normal mode - single winner
+            }
+            
+            console.log(`🏁 Race Setup - Mode: ${this.raceMode}, Winner Count: ${this.winnerCount}, Duration: ${this.raceDuration}s, Speed: ${this.gameSpeed}x`);
+            
+            if (soundToggleEl) {
+                const enabled = soundToggleEl.checked;
+                this.soundManager.setEnabled(enabled);
+                // Send initial sound state to display
+                if (this.displayChannel) {
+                    this.displayChannel.postMessage({
+                        type: 'SOUND_TOGGLE_CHANGED',
+                        data: { enabled }
+                    });
+                    console.log('📢 Initial sound state:', enabled, '- sent to display');
+                }
+            }
         }
+        
+        // Reset winners array for new race
+        this.winners = [];
 
         if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
             alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 2000!`);
@@ -1080,10 +1636,17 @@ class Game {
         // Race dài hơn cần track dài hơn một chút do dynamic không ổn định
         const durationFactor = Math.min(1.15, 1.0 + (this.raceDuration / 600)); 
         const pixelsPerSecond = baseEffectiveSpeed * durationFactor;
-        this.trackLength = this.raceDuration * pixelsPerSecond;
         
-        console.log(`[Track Setup] Duration: ${this.raceDuration}s | Speed: ${pixelsPerSecond.toFixed(1)} px/s | Track: ${this.trackLength.toFixed(0)}px | Expected finish: ${(this.trackLength / baseEffectiveSpeed).toFixed(1)}s`);
+        // Scale trackLength by gameSpeed to maintain race duration
+        // gameSpeed > 1: ducks move faster (deltaTime *= gameSpeed), track longer to keep duration same
+        // gameSpeed < 1: ducks move slower, track shorter to keep duration same
+        // Result: Real-world duration always = raceDuration, visual speed changes
+        this.trackLength = this.raceDuration * pixelsPerSecond * this.gameSpeed;
+        
+        console.log(`[Track Setup] Duration: ${this.raceDuration}s | Speed: ${pixelsPerSecond.toFixed(1)} px/s | GameSpeed: ${this.gameSpeed}x | Track: ${this.trackLength.toFixed(0)}px | Expected finish: ${this.raceDuration}s (real time)`);
         this.cameraOffset = 0;
+        this.smoothCameraTarget = 0; // Reset smooth camera target
+        this.lastCameraOffset = 0; // Reset last camera position
         this.backgroundOffset = 0;
         
         // Set initial CSS variable for duck size
@@ -1258,58 +1821,24 @@ class Game {
         console.log('Target pixel (finish line):', this.trackLength);
         console.log('==================');
         
-        // Only show countdown and auto-fullscreen on display mode
+        // Only show countdown on display mode (removed auto-fullscreen to preserve aspect ratio)
         if (this.isDisplayMode) {
             // Ẩn finish line (sẽ hiện lại khi gần đích)
             const finishLine = document.getElementById('finishLine');
             if (finishLine) finishLine.classList.add('hidden');
             
-            // Auto fullscreen on display window
-            const track = document.getElementById('raceTrack');
-            if (track && !document.fullscreenElement) {
-                track.requestFullscreen().then(() => {
-                    this.isFullscreen = true;
-                    // Show countdown after fullscreen is activated
-                    this.showCountdown(() => {
-                        // Set start time AFTER countdown finishes (only if not already set from control)
-                        if (!this.startTime) {
-                            this.startTime = Date.now();
-                        }
-                        console.log('=== RACE START ===');
-                        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-                        this.soundManager.playStartSound();
-                        this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
-                        this.animate();
-                    });
-                }).catch(err => {
-                    console.log('Fullscreen error:', err);
-                    // Show countdown anyway if fullscreen fails
-                    this.showCountdown(() => {
-                        // Set start time AFTER countdown finishes (only if not already set from control)
-                        if (!this.startTime) {
-                            this.startTime = Date.now();
-                        }
-                        console.log('=== RACE START ===');
-                        console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-                        this.soundManager.playStartSound();
-                        this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
-                        this.animate();
-                    });
-                });
-            } else {
-                // Already in fullscreen, show countdown immediately
-                this.showCountdown(() => {
-                    // Set start time AFTER countdown finishes (only if not already set from control)
-                    if (!this.startTime) {
-                        this.startTime = Date.now();
-                    }
-                    console.log('=== RACE START ===');
-                    console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-                    this.soundManager.playStartSound();
-                    this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
-                    this.animate();
-                });
-            }
+            // Show countdown directly without fullscreen
+            this.showCountdown(() => {
+                // Set start time AFTER countdown finishes (only if not already set from control)
+                if (!this.startTime) {
+                    this.startTime = Date.now();
+                }
+                console.log('=== RACE START ===');
+                console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
+                this.soundManager.playStartSound();
+                this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
+                this.animationId = setInterval(() => this.animate(), 16.67);
+            });
         } else {
             // Control mode - show simple countdown before starting
             this.showCountdown(() => {
@@ -1319,7 +1848,7 @@ class Game {
                 console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
                 this.soundManager.playStartSound();
                 this.soundManager.startRacingAmbiance();
-                this.animate();
+                this.animationId = setInterval(() => this.animate(), 16.67);
             });
         }
         
@@ -1439,48 +1968,64 @@ class Game {
     }
 
     handleDisplayRaceFinished(data) {
-        const { winner, finishTime, rankings } = data;
+        const { winner, finishTime, rankings, raceMode, winners, winnerCount } = data;
         
         console.log('Control: Processing race finish from display');
-        console.log('Winner:', winner.name, 'Time:', finishTime);
+        console.log('Winner:', winner.name, 'Time:', finishTime, 'Mode:', raceMode);
         
-        // Stop control panel timer
+        // Update local state from display
         this.raceFinished = true;
         this.raceStarted = false;
-        
-        // Update local state
         this.rankings = rankings;
+        if (winners && winners.length > 0) {
+            this.winners = winners;
+        }
+        if (winnerCount) {
+            this.winnerCount = winnerCount;
+        }
         
         // Play sounds on control panel
         this.soundManager.playFinishSound();
         setTimeout(() => this.soundManager.playCrowdCheer(), 300);
         
-        // Send RACE_FINISHED and SHOW_WINNER to display
+        // Send messages to display based on mode from display data
         if (this.displayChannel) {
             this.displayChannel.postMessage({
                 type: 'RACE_FINISHED',
                 data: { winner }
             });
             
-            setTimeout(() => {
-                this.displayChannel.postMessage({
-                    type: 'SHOW_WINNER',
-                    data: { 
-                        winner,
-                        finishTime: parseFloat(finishTime)
-                    }
-                });
-            }, 500);
+            // Only send SHOW_WINNER for normal mode
+            if (raceMode !== 'topN') {
+                setTimeout(() => {
+                    this.displayChannel.postMessage({
+                        type: 'SHOW_WINNER',
+                        data: { 
+                            winner,
+                            finishTime: parseFloat(finishTime)
+                        }
+                    });
+                }, 500);
+            }
         }
         
-        // Show continue button in control panel
-        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
-        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        // Show/hide continue buttons based on mode
+        if (raceMode === 'topN') {
+            safeElementAction('continueBtn', el => el.style.display = 'none');
+            safeElementAction('continueBankBtn', el => el.classList.add('hidden'));
+        } else {
+            safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+            safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        }
         safeElementAction('pauseBtn', el => el.disabled = true);
         
-        // Show victory popup on control panel
+        // Show victory popup or winners panel based on mode
         winner._controlFinishTime = parseFloat(finishTime);
-        this.showVictoryPopup(winner);
+        if (raceMode === 'topN') {
+            this.showWinnersPanel();
+        } else {
+            this.showVictoryPopup(winner);
+        }
         
         // Update stats
         this.stats.totalRaces++;
@@ -1492,73 +2037,11 @@ class Game {
         // Update race history
         this.raceHistory.push({
             raceNumber: this.currentRaceNumber,
-            winner: winner.id,
-            duckCount: this.duckCount,
-            duration: this.raceDuration,
-            timestamp: new Date().toLocaleString('vi-VN')
-        });
-        
-        // Update UI
-        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
-        safeElementAction('timeLeft', el => el.textContent = '0s');
-        safeElementAction('pauseBtn', el => el.disabled = true);
-    }
-    
-    handleDisplayRaceFinished(data) {
-        const { winner, finishTime, rankings } = data;
-        
-        console.log('Control: Processing race finish from display');
-        console.log('Winner:', winner.name, 'Time:', finishTime);
-        
-        // Stop control panel timer
-        this.raceFinished = true;
-        this.raceStarted = false;
-        
-        // Update local state
-        this.rankings = rankings;
-        
-        // Play sounds on control panel
-        this.soundManager.playFinishSound();
-        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
-        
-        // Send RACE_FINISHED and SHOW_WINNER to display
-        if (this.displayChannel) {
-            this.displayChannel.postMessage({
-                type: 'RACE_FINISHED',
-                data: { winner }
-            });
-            
-            setTimeout(() => {
-                this.displayChannel.postMessage({
-                    type: 'SHOW_WINNER',
-                    data: { 
-                        winner,
-                        finishTime: parseFloat(finishTime)
-                    }
-                });
-            }, 500);
-        }
-        
-        // Show continue button in control panel
-        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
-        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
-        safeElementAction('pauseBtn', el => el.disabled = true);
-        
-        // Show victory popup on control panel
-        winner._controlFinishTime = parseFloat(finishTime);
-        this.showVictoryPopup(winner);
-        
-        // Update stats
-        this.stats.totalRaces++;
-        if (this.rankings.indexOf(this.rankings[0]) < 3) {
-            this.stats.top3Finishes++;
-        }
-        this.saveStats();
-        
-        // Update race history
-        this.raceHistory.push({
-            raceNumber: this.currentRaceNumber,
-            winner: winner.id,
+            mode: raceMode || 'normal',
+            winners: raceMode === 'topN' && winners && winners.length > 0 
+                ? winners.map(w => ({ id: w.id, name: w.name }))
+                : [{ id: winner.id, name: winner.name }],
+            winnerCount: winners ? winners.length : 1,
             duckCount: this.duckCount,
             duration: this.raceDuration,
             timestamp: new Date().toLocaleString('vi-VN')
@@ -1575,7 +2058,7 @@ class Game {
             return;
         }
         
-        // Update timer display on control panel
+        // Update timer display on control panel - use real time
         const elapsed = (Date.now() - this.startTime) / 1000;
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
         
@@ -1603,76 +2086,17 @@ class Game {
         }
     }
 
-    handleDisplayRaceFinished(data) {
-        const { winner, finishTime, rankings } = data;
-        
-        console.log('Control: Processing race finish from display');
-        console.log('Winner:', winner.name, 'Time:', finishTime);
-        
-        // Stop control panel timer
-        this.raceFinished = true;
-        this.raceStarted = false;
-        
-        // Update local state
-        this.rankings = rankings;
-        
-        // Play sounds on control panel
-        this.soundManager.playFinishSound();
-        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
-        
-        // Send RACE_FINISHED and SHOW_WINNER to display
-        if (this.displayChannel) {
-            this.displayChannel.postMessage({
-                type: 'RACE_FINISHED',
-                data: { winner }
-            });
-            
-            setTimeout(() => {
-                this.displayChannel.postMessage({
-                    type: 'SHOW_WINNER',
-                    data: { 
-                        winner,
-                        finishTime: parseFloat(finishTime)
-                    }
-                });
-            }, 500);
-        }
-        
-        // Show continue button in control panel
-        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
-        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
-        safeElementAction('pauseBtn', el => el.disabled = true);
-        
-        // Show victory popup on control panel
-        winner._controlFinishTime = parseFloat(finishTime);
-        this.showVictoryPopup(winner);
-        
-        // Update stats
-        this.stats.totalRaces++;
-        if (this.rankings.indexOf(this.rankings[0]) < 3) {
-            this.stats.top3Finishes++;
-        }
-        this.saveStats();
-        
-        // Update race history
-        this.raceHistory.push({
-            raceNumber: this.currentRaceNumber,
-            winner: winner.id,
-            duckCount: this.duckCount,
-            duration: this.raceDuration,
-            timestamp: new Date().toLocaleString('vi-VN')
-        });
-        
-        // Update UI
-        safeElementAction('raceStatus', el => el.textContent = 'Finished!');
-        safeElementAction('timeLeft', el => el.textContent = '0s');
-        safeElementAction('pauseBtn', el => el.disabled = true);
-    }
-
     pauseRace() {
         if (!this.racePaused && this.raceStarted && !this.raceFinished) {
             this.racePaused = true;
             this.pausedTime = Date.now();
+            
+            // Stop animation interval
+            if (this.animationId) {
+                clearInterval(this.animationId);
+                this.animationId = null;
+            }
+            
             this.soundManager.stopRacingAmbiance(); // Stop sounds when paused
             safeElementAction('pauseBtn', el => el.disabled = true);
             safeElementAction('resumeBtn', el => el.disabled = false);
@@ -1698,7 +2122,7 @@ class Game {
             safeElementAction('pauseBtn', el => el.disabled = false);
             safeElementAction('resumeBtn', el => el.disabled = true);
             safeElementAction('raceStatus', el => el.textContent = 'Racing!');
-            this.animate();
+            this.animationId = setInterval(() => this.animate(), 16.67);
             
             // Send resume command to display window
             if (this.displayChannel && !this.isDisplayMode) {
@@ -1714,11 +2138,12 @@ class Game {
     animate(timestamp) {
         if (!this.raceStarted || this.raceFinished || this.racePaused) return;
 
-        this.animationId = requestAnimationFrame((ts) => this.animate(ts));
+        // Use setInterval instead of requestAnimationFrame to keep running in background
+        // requestAnimationFrame is throttled/paused when tab is inactive
 
         // Calculate delta time for frame-independent movement
-        if (!this.lastFrameTime) this.lastFrameTime = timestamp || Date.now();
-        const currentTime = timestamp || Date.now();
+        const currentTime = Date.now();
+        if (!this.lastFrameTime) this.lastFrameTime = currentTime;
         const frameTime = currentTime - this.lastFrameTime;
         this.lastFrameTime = currentTime;
         
@@ -1726,7 +2151,12 @@ class Game {
         this.deltaTime = frameTime / this.targetFrameTime;
         // Clamp delta time to prevent huge jumps (max 4x, min 0.25x)
         this.deltaTime = Math.max(0.25, Math.min(4.0, this.deltaTime));
+        
+        // Apply game speed multiplier
+        this.deltaTime *= this.gameSpeed;
 
+        // Calculate elapsed time - always use real time to keep race duration accurate
+        // gameSpeed only affects visual speed, not race duration
         const elapsed = (Date.now() - this.startTime) / 1000;
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
         
@@ -1769,12 +2199,63 @@ class Game {
             }
         }
 
-        // Check if duck's left edge passes finish line (minus small offset for visual accuracy)
-        const hasFinisher = this.ducks.some(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET);
+        // Check for finishers and handle based on race mode
+        let hasFinisher = false; // Track if any duck finished (for normal mode)
         
-        if (hasFinisher) {
-            const winner = this.ducks.find(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET);
-            console.log('Winner detected:', winner.name, 'Position:', winner.position, 'TrackLength:', this.trackLength);
+        this.ducks.forEach(duck => {
+            // Check if duck just finished (not already in winners list)
+            if (duck.position >= this.trackLength - FINISH_LINE_OFFSET && 
+                !this.winners.find(w => w.id === duck.id)) {
+                
+                // Only add to winners array in Top N mode
+                // In normal mode, winners array stays empty
+                if (this.raceMode === 'topN') {
+                    this.winners.push({
+                        id: duck.id,
+                        name: duck.name,
+                        iconSrc: duck.iconSrc,
+                        finishTime: duck.finishTime,
+                        position: duck.position
+                    });
+                    
+                    console.log(`🏆 Winner #${this.winners.length}:`, duck.name, 'Time:', duck.finishTime);
+                    
+                    // Show toast notification
+                    this.showToastNotification(duck, this.winners.length);
+                    
+                    // Send winner update to display
+                    if (this.displayChannel && !this.isDisplayMode) {
+                        this.displayChannel.postMessage({
+                            type: 'WINNER_FINISHED',
+                            data: {
+                                winner: this.winners[this.winners.length - 1],
+                                position: this.winners.length,
+                                totalWinners: this.winnerCount
+                            }
+                        });
+                    }
+                } else {
+                    // Normal mode: just mark that someone finished (don't add to winners array)
+                    hasFinisher = true;
+                    console.log(`🏁 First finisher: ${duck.name}, Time: ${duck.finishTime}`);
+                }
+            }
+        });
+        
+        // Check if race should end based on mode
+        const shouldEndRace = this.raceMode === 'topN' 
+            ? this.winners.length >= this.winnerCount 
+            : hasFinisher; // Normal mode: end when first duck finishes
+        
+        if (shouldEndRace) {
+            console.log(`Race complete! Mode: ${this.raceMode}, Winners: ${this.winners.length}`);
+            
+            // Stop all ducks immediately when race ends
+            this.ducks.forEach(duck => {
+                duck.speed = 0;
+                duck.targetSpeed = 0;
+            });
+            
             this.endRace();
             return;
         }
@@ -1826,7 +2307,14 @@ class Game {
             let targetCameraOffset;
             let cameraMaxOffset;
             let cameraSpeed;
-            let backgroundSpeed = 15; // Default background scroll speed
+            
+            // Calculate average speed of top 10 ducks for background sync
+            const topDucks = this.rankings.slice(0, Math.min(10, this.rankings.length));
+            const avgSpeed = topDucks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / topDucks.length;
+            
+            // Background speed synchronized with duck movement (like Dinosaur Game)
+            // Base speed scaled by average duck speed for realistic motion
+            let backgroundSpeed = avgSpeed * 2.5; // Multiply for visual effect
             
             if (distanceToFinish <= 500) {
                 // When within 500px of finish, gradually slow down camera and background
@@ -1836,11 +2324,11 @@ class Game {
                 targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
                 cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
                 
-                // Gradually slow down camera speed (from 0.1 to 0)
-                cameraSpeed = 0.1 * slowdownFactor;
+                // Gradually slow down camera speed (from 0.15 to 0)
+                cameraSpeed = 0.15 * slowdownFactor;
                 
-                // Gradually slow down background (from 15 to 0)
-                backgroundSpeed = 15 * slowdownFactor;
+                // Gradually slow down background proportionally (keep sync with ducks)
+                backgroundSpeed = backgroundSpeed * slowdownFactor;
                 
                 // Show finish line
                 const finishLine = document.getElementById('finishLine');
@@ -1850,17 +2338,35 @@ class Game {
                 // Camera follows leader normally (60% from left edge)
                 targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
                 cameraMaxOffset = this.trackLength - this.viewportWidth;
-                cameraSpeed = 0.1;
+                cameraSpeed = 0.15; // Increased from 0.1 for smoother response
             }
             
-            this.cameraOffset += (targetCameraOffset - this.cameraOffset) * cameraSpeed;
+            // Smooth camera target with lerp to prevent snapping when leader changes
+            // This smooths out sudden jumps when a new duck takes the lead
+            const targetSmoothSpeed = 0.08; // Lower = smoother transitions
+            this.smoothCameraTarget += (targetCameraOffset - this.smoothCameraTarget) * targetSmoothSpeed;
+            
+            // Apply smoothed target with additional lerp for final camera position
+            this.cameraOffset += (this.smoothCameraTarget - this.cameraOffset) * cameraSpeed;
+            
+            // Prevent camera from moving backwards (creates illusion of ducks running backwards)
+            // Only allow forward movement or stay in place
+            if (this.cameraOffset < this.lastCameraOffset) {
+                this.cameraOffset = this.lastCameraOffset;
+            }
+            this.lastCameraOffset = this.cameraOffset;
+            
+            // Clamp camera within bounds
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
             
-            // Update background with variable speed
+            // Update background with variable speed synchronized to ducks
             this.backgroundOffset += backgroundSpeed * this.deltaTime;
         } else {
-            // If no leader or race not active, keep background moving
-            this.backgroundOffset += 15 * this.deltaTime;
+            // If no leader or race not active, calculate average speed of all ducks
+            const allDucksSpeed = this.ducks.length > 0 
+                ? this.ducks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / this.ducks.length
+                : 3.5; // Default base speed
+            this.backgroundOffset += (allDucksSpeed * 2.5) * this.deltaTime;
         }
         
         this.updateDuckPositions();
@@ -2042,8 +2548,9 @@ class Game {
         this.raceFinished = true;
         this.raceStarted = false;
         
+        // Stop animation interval
         if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
+            clearInterval(this.animationId);
             this.animationId = null;
         }
 
@@ -2058,7 +2565,7 @@ class Game {
             this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
             const winner = this.rankings[0];
             
-            // Calculate finish time
+            // Calculate finish time - use real time
             const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
             
             // Send winner info to control panel
@@ -2068,10 +2575,13 @@ class Game {
                     data: { 
                         winner,
                         finishTime: parseFloat(finishTime),
-                        rankings: this.rankings
+                        rankings: this.rankings,
+                        raceMode: this.raceMode,
+                        winners: this.winners,
+                        winnerCount: this.winnerCount
                     }
                 });
-                console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name);
+                console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name, 'Mode:', this.raceMode);
             }
             
             return; // Display doesn't show victory popup locally
@@ -2083,7 +2593,7 @@ class Game {
         this.soundManager.playFinishSound();
         setTimeout(() => this.soundManager.playCrowdCheer(), 300);
         
-        // Calculate finish time here to ensure consistency
+        // Calculate finish time here to ensure consistency - use real time
         const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
         
         // Send finish message to display window
@@ -2093,26 +2603,48 @@ class Game {
                 data: { winner }
             });
             
-            // Show winner on display with synchronized finish time
-            setTimeout(() => {
-                this.displayChannel.postMessage({
-                    type: 'SHOW_WINNER',
-                    data: { 
-                        winner,
-                        finishTime: parseFloat(finishTime) // Send as number
-                    }
-                });
-            }, 500);
+            // Show winner on display ONLY for normal mode (not Top N)
+            // Delay to allow player to see duck crossing finish line
+            if (this.raceMode !== 'topN') {
+                setTimeout(() => {
+                    this.displayChannel.postMessage({
+                        type: 'SHOW_WINNER',
+                        data: { 
+                            winner,
+                            finishTime: parseFloat(finishTime)
+                        }
+                    });
+                }, 1500); // 1.5 second delay to see finish
+            }
         }
         
         // Show continue button in control panel (only if elements exist)
-        safeElementAction('continueBtn', el => el.style.display = 'inline-block');
-        safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        // For Top N mode: hide continue buttons since we only run once
+        if (this.raceMode === 'topN') {
+            safeElementAction('continueBtn', el => el.style.display = 'none');
+            safeElementAction('continueBankBtn', el => el.classList.add('hidden'));
+        } else {
+            safeElementAction('continueBtn', el => el.style.display = 'inline-block');
+            safeElementAction('continueBankBtn', el => el.classList.remove('hidden'));
+        }
         safeElementAction('pauseBtn', el => el.disabled = true);
         
-        // Show victory popup
-        winner._controlFinishTime = parseFloat(finishTime); // Store finish time on winner object
-        this.showVictoryPopup(winner);
+        // Show victory popup or go directly to results based on race mode
+        if (this.raceMode === 'topN') {
+            // Top N mode: Skip popup, show winners panel directly
+            this.winners.forEach((w, index) => {
+                w._controlFinishTime = parseFloat(finishTime);
+            });
+            // Show winners panel instead of popup
+            this.showWinnersPanel();
+        } else {
+            // Normal mode: Show victory popup for single winner after delay
+            // Allow time for player to see duck crossing finish line
+            winner._controlFinishTime = parseFloat(finishTime);
+            setTimeout(() => {
+                this.showVictoryPopup(winner);
+            }, 1500); // 1.5 second delay to see finish
+        }
 
         this.stats.totalRaces++;
         if (this.rankings.indexOf(this.rankings[0]) < 3) {
@@ -2123,7 +2655,11 @@ class Game {
 
         this.raceHistory.push({
             raceNumber: this.currentRaceNumber,
-            winner: winner.id,
+            mode: this.raceMode || 'normal',
+            winners: this.raceMode === 'topN' && this.winners.length > 0 
+                ? this.winners.map(w => ({ id: w.id, name: w.name }))
+                : [{ id: winner.id, name: winner.name }],
+            winnerCount: this.winners.length || 1,
             duckCount: this.duckCount,
             duration: this.raceDuration,
             timestamp: new Date().toLocaleString('vi-VN')
@@ -2136,7 +2672,7 @@ class Game {
         const resultPanel = document.getElementById('resultPanel');
         if (resultPanel) resultPanel.classList.remove('hidden');
 
-        safeElementAction('resultTitle', el => el.innerHTML = '🏆 Race Finished!');
+        safeElementAction('resultTitle', el => el.innerHTML = `🏆 Race Finished! <span style="font-size:0.6em;color:#888;">(${this.raceMode === 'topN' ? 'Top ' + this.winnerCount : 'Normal'})</span>`);
         
         let resultHTML = `
             <div class="result-winner">
@@ -2205,9 +2741,9 @@ class Game {
         // Set winner name
         winnerNameEl.textContent = winner.name;
         
-        // Calculate finish time in seconds (elapsed time from race start)
+        // Calculate finish time in seconds (elapsed time from race start) - use real time
         const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
-        console.log('Victory popup - Start time:', this.startTime, 'Current:', Date.now(), 'Elapsed:', finishTime);
+        console.log('Victory popup - Start time:', this.startTime, 'Current:', Date.now(), 'Elapsed:', finishTime, 'Speed:', this.gameSpeed + 'x');
         winnerStatsEl.innerHTML = `
             <p><strong>🕒 Time:</strong> ${finishTime}s</p>
             <p><strong>📍 Position:</strong> 1st</p>
@@ -2320,19 +2856,48 @@ class Game {
     }
 
     goHome() {
-        // Stop the race if running
+        // If race is currently running, just show control panel (don't reset!)
+        if (this.raceStarted && !this.raceFinished) {
+            console.log('Race is running - showing control panel');
+            
+            // Hide result and history panels
+            const resultPanel = document.getElementById('resultPanel');
+            const historyPanel = document.getElementById('historyPanel');
+            if (resultPanel) resultPanel.classList.add('hidden');
+            if (historyPanel) historyPanel.classList.add('hidden');
+            
+            // Show control panel to monitor race
+            const raceInfo = document.getElementById('raceInfo');
+            const controlPanel = document.getElementById('controlPanel');
+            if (raceInfo) raceInfo.classList.remove('hidden');
+            if (controlPanel) controlPanel.classList.remove('hidden');
+            
+            // Don't reset race state!
+            return;
+        }
+        
+        // Race is not running - safe to go home and reset
+        // Stop the race if was paused
         if (this.isRunning) {
             this.stopRace();
         }
         
         // Hide all panels
-        document.getElementById('resultPanel').classList.add('hidden');
-        document.getElementById('historyPanel').classList.add('hidden');
-        document.getElementById('raceTrack').classList.add('hidden');
-        document.getElementById('controlPanel').classList.add('hidden');
+        const resultPanel = document.getElementById('resultPanel');
+        const historyPanel = document.getElementById('historyPanel');
+        const raceTrack = document.getElementById('raceTrack');
+        const controlPanel = document.getElementById('controlPanel');
+        const raceInfo = document.getElementById('raceInfo');
+        
+        if (resultPanel) resultPanel.classList.add('hidden');
+        if (historyPanel) historyPanel.classList.add('hidden');
+        if (raceTrack) raceTrack.classList.add('hidden');
+        if (controlPanel) controlPanel.classList.add('hidden');
+        if (raceInfo) raceInfo.classList.add('hidden');
         
         // Show settings panel
-        document.getElementById('settingsPanel').classList.remove('hidden');
+        const settingsPanel = document.getElementById('settingsPanel');
+        if (settingsPanel) settingsPanel.classList.remove('hidden');
         
         // Exit fullscreen if active
         if (document.fullscreenElement) {
@@ -2347,19 +2912,21 @@ class Game {
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
         
-        document.getElementById('resultTitle').innerHTML = '🏆 Prize Results';
+        const modeLabel = this.raceMode === 'topN' ? `Top ${this.winnerCount} Winners` : 'Single Winner';
+        document.getElementById('resultTitle').innerHTML = `🏆 Race Finished! <span style="font-size:0.6em;color:#888;">(${modeLabel})</span>`;
         
         let html = '<div class="winners-list">';
-        html += '<h3>🎉 Prize List 🎉</h3>';
         
         if (this.winners.length > 0) {
             html += '<div class="winners-grid">';
             this.winners.forEach((winner, index) => {
                 const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
+                const position = index + 1;
+                const positionSuffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
                 html += `
                     <div class="winner-card">
                         <div class="winner-medal">${medal}</div>
-                        <div class="winner-position">Prize ${winner.position}</div>
+                        <div class="winner-position">${position}${positionSuffix} Place</div>
                         <div class="winner-duck-name">${winner.name}</div>
                         <div style="width:30px;height:30px;background:${winner.color};border-radius:50%;margin:10px auto;"></div>
                     </div>
@@ -2375,18 +2942,10 @@ class Game {
         html += '<button class="btn btn-primary" onclick="game.fullReset()">🔄 Play Again</button>';
         html += '<button class="btn btn-secondary" onclick="game.viewHistory()">📜 View History</button>';
         html += '<button class="btn btn-secondary" onclick="game.toggleFullscreenResult()">🔍 View Fullscreen</button>';
+        html += '<button class="btn btn-secondary" onclick="game.sendResultsToDisplay()">📺 Send to Display</button>';
         html += '</div>';
         
         document.getElementById('resultMessage').innerHTML = html;
-        
-        // Add click handler to result panel for fullscreen toggle
-        resultPanel.onclick = (e) => {
-            if (e.target === resultPanel || e.target.closest('.result-panel:not(.result-actions)')) {
-                if (!e.target.closest('button')) {
-                    this.toggleFullscreenResult();
-                }
-            }
-        };
         
         // Tự động cuộn đến panel kết quả
         setTimeout(() => {
@@ -2494,21 +3053,8 @@ class Game {
             return;
         }
         
-        // Otherwise toggle fullscreen (only works on display mode)
-        if (this.isDisplayMode) {
-            const track = document.getElementById('raceTrack');
-            if (!document.fullscreenElement) {
-                track.requestFullscreen().catch(err => {
-                    console.log('Fullscreen error:', err);
-                });
-                this.isFullscreen = true;
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                    this.isFullscreen = false;
-                }
-            }
-        }
+        // Fullscreen disabled to preserve custom aspect ratio (20:5)
+        console.log('Fullscreen disabled - preserving custom aspect ratio');
     }
 
     reset() {

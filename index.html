@@ -30,6 +30,25 @@
                 <input type="number" id="raceDuration" min="5" max="300" value="30">
             </div>
             <div class="input-group">
+                <label for="gameSpeed">Game Speed: <span id="gameSpeedValue">1.0x</span></label>
+                <input type="range" id="gameSpeed" min="0.25" max="3" step="0.25" value="1" 
+                       oninput="document.getElementById('gameSpeedValue').textContent = this.value + 'x'; if(window.game) game.updateGameSpeed(parseFloat(this.value));">
+                <small style="color: #888;">Adjust race speed: 0.25x (slow motion) to 3x (fast forward)</small>
+            </div>
+            <div class="input-group">
+                <label for="raceMode">Race Mode:</label>
+                <select id="raceMode" onchange="game.toggleRaceMode()">
+                    <option value="normal">Normal (Single Winner)</option>
+                    <option value="topN">Top N Winners</option>
+                </select>
+                <small style="color: #888;">Normal: Single winner with popup. Top N: Multiple winners with results panel.</small>
+            </div>
+            <div class="input-group hidden" id="winnerCountGroup">
+                <label for="winnerCount">Number of Winners:</label>
+                <input type="number" id="winnerCount" min="1" max="50" value="3">
+                <small style="color: #888;">How many winners to wait for (1-50)</small>
+            </div>
+            <div class="input-group">
                 <label for="duckNamesFile">Racer List File (CSV/Excel):</label>
                 <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)">
                 <small style="color: #888;">Upload CSV file with columns: No. and Name</small>
@@ -48,6 +67,12 @@
                 </label>
             </div>
             <div class="input-group">
+                <label for="customSoundFile">Custom Race Sound (MP3):</label>
+                <input type="file" id="customSoundFile" accept=".mp3,.wav,.ogg" style="width: 100%; padding: 5px;">
+                <small style="color: #888;">Optional: Upload custom racing ambiance sound</small>
+            </div>
+            
+            <div class="input-group" style="margin-top: 20px;">
                 <a href="display.html" target="_blank" class="btn btn-secondary" id="openDisplayBtn" style="width: 100%; margin-bottom: 10px; text-align: center; text-decoration: none; display: inline-block; pointer-events: none; opacity: 0.5;">
                     ⏳ Loading Icons...
                 </a>
@@ -73,7 +98,91 @@
         <div class="result-panel hidden" id="resultPanel">
             <h2 id="resultTitle">Results</h2>
             <div id="resultMessage"></div>
-            <button class="btn btn-secondary" onclick="game.sendResultsToDisplay()" style="margin-top: 20px;">📺 Send to Display</button>
+            
+            <!-- Result Panel Settings - Collapsible -->
+            <div style="margin-top: 30px; border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px;">
+                <button class="btn btn-small" onclick="game.toggleResultPanelSettings()" style="background: #667eea; width: 100%;">⚙️ Result Panel Settings</button>
+                
+                <div id="resultPanelSettingsContainer" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
+                    <div class="input-group">
+                        <label for="prizeTitleInput">Prize Title:</label>
+                        <input type="text" id="prizeTitleInput" placeholder="Prize Results" value="Prize Results" maxlength="50" style="padding: 8px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; width: 100%;">
+                        <small style="color: #888;">This will appear on result panel and popup</small>
+                    </div>
+                    
+                    <div style="margin-top: 15px; padding: 10px; background: rgba(240, 147, 251, 0.1); border-radius: 5px;">
+                        <h4 style="color: #f093fb; font-size: 16px; margin: 0 0 10px 0;">🏆 Customize Prize Names</h4>
+                        <div id="prizeNamesContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 1:</label>
+                                <input type="text" id="prizeName1" placeholder="Prize 1" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 2:</label>
+                                <input type="text" id="prizeName2" placeholder="Prize 2" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 3:</label>
+                                <input type="text" id="prizeName3" placeholder="Prize 3" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 4:</label>
+                                <input type="text" id="prizeName4" placeholder="Prize 4" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 5:</label>
+                                <input type="text" id="prizeName5" placeholder="Prize 5" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 6:</label>
+                                <input type="text" id="prizeName6" placeholder="Prize 6" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 7:</label>
+                                <input type="text" id="prizeName7" placeholder="Prize 7" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 8:</label>
+                                <input type="text" id="prizeName8" placeholder="Prize 8" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 9:</label>
+                                <input type="text" id="prizeName9" placeholder="Prize 9" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 10:</label>
+                                <input type="text" id="prizeName10" placeholder="Prize 10" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                            </div>
+                        </div>
+                        <small style="color: #888; margin-top: 8px; display: block;">Leave blank to use default names (Prize 1, Prize 2, etc.)</small>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="resultBgType">Background Type:</label>
+                        <select id="resultBgType" onchange="game.toggleResultBackground()">
+                            <option value="default">Default</option>
+                            <option value="color">Solid Color</option>
+                            <option value="image">Custom Image</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group" id="resultBgColorGroup" style="display: none;">
+                        <label for="resultBgColor">Background Color:</label>
+                        <input type="color" id="resultBgColor" value="#1a1a2e">
+                    </div>
+                    
+                    <div class="input-group" id="resultBgImageGroup" style="display: none;">
+                        <label for="resultBgImage">Background Image:</label>
+                        <input type="file" id="resultBgImage" accept="image/*" onchange="game.loadResultBackgroundImage(event)">
+                        <small style="color: #888;">Upload JPG, PNG, or GIF</small>
+                    </div>
+                    
+                    <div class="input-group">
+                        <button class="btn btn-small" onclick="game.applyResultPanelSettings()" style="background: #667eea; margin-right: 10px;">✓ Apply</button>
+                        <button class="btn btn-small" onclick="game.resetResultPanelSettings()" style="background: #888;">⟲ Reset</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Race History -->
@@ -102,7 +211,7 @@
         <!-- Control Panel (for control window) -->
         <div class="control-panel hidden" id="controlPanel" style="margin-top: 20px; position: relative; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button class="btn btn-small" onclick="game.goHome()" id="homeBtn">🏠 Home</button>
-            <button class="btn btn-small" onclick="game.startRace()" id="controlStartBtn" disabled>Loading...</button>
+            <button class="btn btn-small" onclick="game.controlStartRace()" id="controlStartBtn" disabled>Loading...</button>
             <button class="btn btn-small" onclick="game.pauseRace()" id="pauseBtn">⏸ Pause</button>
             <button class="btn btn-small" onclick="game.resumeRace()" id="resumeBtn" disabled>▶ Resume</button>
             <button class="btn btn-primary" onclick="game.continueRace()" id="continueBtn" style="display: none;">🎯 Next Race</button>
@@ -111,10 +220,11 @@
 
         <!-- Race Track HIDDEN on control screen - only visible on display.html -->
         <div class="race-track hidden" id="raceTrack" style="display: none !important;">
-            <div class="big-timer hidden" id="bigTimer">
-                <div class="timer-display">00:00:00</div>
+            <div class="bank-top" id="bankTop">
+                <div class="big-timer hidden" id="bigTimer">
+                    <div class="timer-display">00:00:00</div>
+                </div>
             </div>
-            <div class="bank-top" id="bankTop"></div>
             <div class="race-river" id="raceRiver">
                 <div class="water-flow"></div>
                 <div class="water-ripples"></div>
@@ -134,6 +244,9 @@
         </div>
     </div>
     </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
 
     <!-- Victory Popup (outside container for max z-index) -->
     <div class="victory-popup hidden" id="victoryPopup">
@@ -165,6 +278,8 @@
             console.log('Game object exists:', typeof game !== 'undefined');
             if (typeof game !== 'undefined') {
                 console.log('Game initialized successfully');
+                // Load saved result panel settings
+                game.loadResultPanelSettings();
             } else {
                 console.error('Game object not found! Check game.js for errors.');
             }
