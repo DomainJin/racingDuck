@@ -555,6 +555,7 @@ class Game {
         this.smoothCameraTarget = 0; // Smooth camera target for lerping
         this.lastCameraOffset = 0; // Track last camera position to prevent backwards movement
         this.backgroundOffset = 0;
+        this.targetBackgroundOffset = 0; // Target position for smooth background scrolling
         this.viewportWidth = 0;
         this.trackHeight = 0;
         this.isFullscreen = false;
@@ -632,6 +633,9 @@ class Game {
         
         // this.updateStatsDisplay(); // Stats panel removed
         this.updateHistoryWin(); // Load history from localStorage
+        
+        // Load result panel settings for both control and display mode
+        this.loadResultPanelSettings();
         
         // Only detect themes and load images if NOT in display mode
         // Display mode will load icons immediately to be ready
@@ -786,6 +790,8 @@ class Game {
         const bgType = document.getElementById('resultBgType').value;
         const bgColor = document.getElementById('resultBgColor').value;
         const bgImage = localStorage.getItem('resultPanelBackgroundImage');
+        const prizeTitle = localStorage.getItem('customPrizeTitle') || 'Prize Results';
+        const prizeNames = JSON.parse(localStorage.getItem('customPrizeNames') || '{}');
         
         const resultPanel = document.getElementById('resultPanel');
         if (!resultPanel) {
@@ -822,12 +828,50 @@ class Game {
             }
         }
         
+        // Apply prize title immediately to result panel
+        const resultTitle = document.getElementById('resultTitle');
+        if (resultTitle) {
+            resultTitle.innerHTML = `🏆 ${prizeTitle}`;
+        }
+        
+        // Re-render winner cards if there are winners
+        if (this.winners && this.winners.length > 0) {
+            const resultMessage = document.getElementById('resultMessage');
+            if (resultMessage) {
+                let html = '<div class="winners-list">';
+                html += '<div class="winners-grid">';
+                this.winners.forEach((winner, index) => {
+                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
+                    const position = index + 1;
+                    const prizeName = this.getPrizeName(position);
+                    html += `
+                        <div class="winner-card">
+                            <div class="winner-medal">${medal}</div>
+                            <div class="winner-position">${prizeName}</div>
+                            <div class="winner-duck-name">${winner.name}</div>
+                        </div>
+                    `;
+                });
+                html += '</div></div>';
+                
+                // Keep existing buttons if they exist
+                const existingActions = document.getElementById('resultActions');
+                if (existingActions) {
+                    html += existingActions.outerHTML;
+                }
+                
+                resultMessage.innerHTML = html;
+            }
+        }
+        
         // Send settings to display via BroadcastChannel
         if (this.displayChannel) {
             const settings = {
                 type: bgType,
                 color: bgColor,
-                image: bgImage
+                image: bgImage,
+                prizeTitle: prizeTitle,
+                prizeNames: prizeNames
             };
             
             this.displayChannel.postMessage({
@@ -838,8 +882,8 @@ class Game {
             console.log('Result panel settings sent to display:', settings);
         }
         
-        console.log('Result panel settings applied:', { bgType, bgColor });
-        alert('✓ Result panel background updated!');
+        console.log('Result panel settings applied:', { bgType, bgColor, prizeTitle, prizeNames });
+        alert('✓ Result panel settings updated!');
     }
     
     resetResultPanelSettings() {
@@ -905,6 +949,14 @@ class Game {
         // Load custom prize names
         this.loadPrizeNames();
         
+        // Apply prize title to result panel (for display mode)
+        if (this.isDisplayMode) {
+            const resultTitle = document.querySelector('.result-title');
+            if (resultTitle && savedTitle) {
+                resultTitle.textContent = savedTitle;
+            }
+        }
+        
         const bgType = localStorage.getItem('resultPanelBackgroundType');
         const bgColor = localStorage.getItem('resultPanelBackgroundColor');
         const bgImage = localStorage.getItem('resultPanelBackgroundImage');
@@ -928,7 +980,7 @@ class Game {
             resultPanel.style.setProperty('background-color', 'transparent', 'important');
         }
         
-        console.log('Loaded saved result panel settings:', { bgType, bgColor });
+        console.log('Result panel settings loaded:', { bgType, bgColor, isDisplayMode: this.isDisplayMode });
     }
 
     loadStats() {
@@ -1591,8 +1643,14 @@ class Game {
             }
         }
         
-        // Reset winners array for new race
-        this.winners = [];
+        // Load persistent winners from localStorage to preserve across races
+        // Don't reset to [] - need to accumulate winners across multiple races
+        const savedWinners = this.loadWinners();
+        if (savedWinners && savedWinners.length > 0) {
+            this.winners = savedWinners;
+        } else {
+            this.winners = [];
+        }
 
         if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
             alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 2000!`);
@@ -1648,6 +1706,7 @@ class Game {
         this.smoothCameraTarget = 0; // Reset smooth camera target
         this.lastCameraOffset = 0; // Reset last camera position
         this.backgroundOffset = 0;
+        this.targetBackgroundOffset = 0; // Reset target background offset
         
         // Set initial CSS variable for duck size
         const initialDuckHeight = this.trackHeight * 0.5;
@@ -2022,8 +2081,10 @@ class Game {
         // Show victory popup or winners panel based on mode
         winner._controlFinishTime = parseFloat(finishTime);
         if (raceMode === 'topN') {
+            // Top N mode: Show winners panel only, no victory popup
             this.showWinnersPanel();
         } else {
+            // Normal mode: Show victory popup
             this.showVictoryPopup(winner);
         }
         
@@ -2359,14 +2420,18 @@ class Game {
             // Clamp camera within bounds
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
             
-            // Update background with variable speed synchronized to ducks
-            this.backgroundOffset += backgroundSpeed * this.deltaTime;
+            // Update background with smooth interpolation
+            this.targetBackgroundOffset += backgroundSpeed * this.deltaTime;
+            const backgroundSmoothSpeed = 0.12; // Smooth background scrolling
+            this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
         } else {
             // If no leader or race not active, calculate average speed of all ducks
             const allDucksSpeed = this.ducks.length > 0 
                 ? this.ducks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / this.ducks.length
                 : 3.5; // Default base speed
-            this.backgroundOffset += (allDucksSpeed * 2.5) * this.deltaTime;
+            this.targetBackgroundOffset += (allDucksSpeed * 2.5) * this.deltaTime;
+            const backgroundSmoothSpeed = 0.12;
+            this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
         }
         
         this.updateDuckPositions();
@@ -2559,29 +2624,32 @@ class Game {
         
         // Display mode: Send winner info back to control then stop
         if (this.isDisplayMode) {
-            console.log('Display: Race ended, sending winner to control');
-            
-            // Calculate rankings and winner
-            this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
-            const winner = this.rankings[0];
-            
-            // Calculate finish time - use real time
-            const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
-            
-            // Send winner info to control panel
-            if (this.displayChannel) {
-                this.displayChannel.postMessage({
-                    type: 'DISPLAY_RACE_FINISHED',
-                    data: { 
-                        winner,
-                        finishTime: parseFloat(finishTime),
-                        rankings: this.rankings,
-                        raceMode: this.raceMode,
-                        winners: this.winners,
-                        winnerCount: this.winnerCount
-                    }
-                });
-                console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name, 'Mode:', this.raceMode);
+            // Only send message in normal mode, skip in Top N mode
+            if (this.raceMode !== 'topN') {
+                console.log('Display: Race ended, sending winner to control');
+                
+                // Calculate rankings and winner
+                this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
+                const winner = this.rankings[0];
+                
+                // Calculate finish time - use real time
+                const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+                
+                // Send winner info to control panel
+                if (this.displayChannel) {
+                    this.displayChannel.postMessage({
+                        type: 'DISPLAY_RACE_FINISHED',
+                        data: { 
+                            winner,
+                            finishTime: parseFloat(finishTime),
+                            rankings: this.rankings,
+                            raceMode: this.raceMode,
+                            winners: this.winners,
+                            winnerCount: this.winnerCount
+                        }
+                    });
+                    console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name, 'Mode:', this.raceMode);
+                }
             }
             
             return; // Display doesn't show victory popup locally
@@ -2629,17 +2697,34 @@ class Game {
         }
         safeElementAction('pauseBtn', el => el.disabled = true);
         
-        // Show victory popup or go directly to results based on race mode
+        // Save winners to history and exclude them from next race
         if (this.raceMode === 'topN') {
-            // Top N mode: Skip popup, show winners panel directly
+            // Top N mode: Save all winners to persistent history
+            const currentWinnerCount = this.winners.length;
             this.winners.forEach((w, index) => {
                 w._controlFinishTime = parseFloat(finishTime);
+                // Add position info for persistent storage
+                if (!w.position) {
+                    w.position = currentWinnerCount + index + 1;
+                }
+                if (!w.raceNumber) {
+                    w.raceNumber = this.currentRaceNumber;
+                }
             });
-            // Show winners panel instead of popup
+            
+            // Remove winners from activeDuckNames for next race
+            const winnerNames = this.winners.map(w => w.name);
+            this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+            
+            // Save winners to localStorage
+            this.saveWinners();
+            this.updateHistoryWin();
+            
+            // Show winners panel
             this.showWinnersPanel();
         } else {
             // Normal mode: Show victory popup for single winner after delay
-            // Allow time for player to see duck crossing finish line
+            // Winner will be saved when user clicks Continue
             winner._controlFinishTime = parseFloat(finishTime);
             setTimeout(() => {
                 this.showVictoryPopup(winner);
@@ -2912,8 +2997,8 @@ class Game {
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
         
-        const modeLabel = this.raceMode === 'topN' ? `Top ${this.winnerCount} Winners` : 'Single Winner';
-        document.getElementById('resultTitle').innerHTML = `🏆 Race Finished! <span style="font-size:0.6em;color:#888;">(${modeLabel})</span>`;
+        const prizeTitle = this.getPrizeTitle();
+        document.getElementById('resultTitle').innerHTML = `🏆 ${prizeTitle}`;
         
         let html = '<div class="winners-list">';
         
@@ -2922,13 +3007,12 @@ class Game {
             this.winners.forEach((winner, index) => {
                 const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
                 const position = index + 1;
-                const positionSuffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
+                const prizeName = this.getPrizeName(position);
                 html += `
                     <div class="winner-card">
                         <div class="winner-medal">${medal}</div>
-                        <div class="winner-position">${position}${positionSuffix} Place</div>
+                        <div class="winner-position">${prizeName}</div>
                         <div class="winner-duck-name">${winner.name}</div>
-                        <div style="width:30px;height:30px;background:${winner.color};border-radius:50%;margin:10px auto;"></div>
                     </div>
                 `;
             });

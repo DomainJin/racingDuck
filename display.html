@@ -39,12 +39,107 @@
         
         .result-panel.fullscreen {
             display: flex !important;
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 100vw !important;
+            height: calc(100vw * 5 / 20) !important; /* 20:5 aspect ratio (4:1) */
+            max-height: 100vh !important;
+            max-width: calc(100vh * 20 / 5) !important;
+            margin: 0 !important;
+            border-radius: 20px !important;
+            z-index: 9999 !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            padding: 2% !important;
+            cursor: default !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
         }
         
         /* Hide pseudo-elements for result-panel on display */
         .result-panel::before,
         .result-panel::after {
             display: none !important;
+        }
+        
+        /* Scale result panel children to parent size */
+        .result-panel.fullscreen #resultTitle {
+            font-size: 2.5vw !important;
+            margin: 0 0 1.5vh 0 !important;
+            flex-shrink: 0 !important;
+        }
+        
+        .result-panel.fullscreen .winners-list {
+            width: 100% !important;
+            height: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            flex: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+        }
+        
+        .result-panel.fullscreen .winners-grid {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 1vw !important;
+            width: 90% !important;
+            max-width: 90% !important;
+            height: auto !important;
+            padding: 0 !important;
+        }
+        
+        .result-panel.fullscreen .winner-card {
+            width: auto !important;
+            min-width: 120px !important;
+            max-width: 180px !important;
+            padding: 1.5% 1.2% !important;
+            border-radius: 8px !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+        }
+        
+        .result-panel.fullscreen .winner-medal {
+            font-size: 3em !important;
+            margin: 0 0 0.3em 0 !important;
+            line-height: 1 !important;
+        }
+        
+        .result-panel.fullscreen .winner-position {
+            font-size: 1em !important;
+            margin: 0 0 0.3em 0 !important;
+            white-space: nowrap !important;
+        }
+        
+        .result-panel.fullscreen .winner-duck-name {
+            font-size: 1.2em !important;
+            margin: 0.3em 0 !important;
+            word-break: break-word !important;
+            text-align: center !important;
+            line-height: 1.2 !important;
+        }
+        
+        .result-panel.fullscreen .result-actions {
+            margin-top: 1vh !important;
+            flex-shrink: 0 !important;
+            display: none !important;
+        }
+        
+        .result-panel.fullscreen .btn {
+            font-size: 1vw !important;
+            padding: 0.8vh 1.5vw !important;
+            margin: 0.3vh !important;
         }
         
         /* Race info at top */
@@ -862,6 +957,24 @@
                     resultPanel.style.setProperty('background-color', 'transparent', 'important');
                     console.log('✓ Result panel image applied');
                 }
+            }
+            
+            // Apply prize title
+            if (data.prizeTitle) {
+                const resultTitle = document.querySelector('.result-title');
+                if (resultTitle) {
+                    resultTitle.textContent = data.prizeTitle;
+                    console.log('✓ Prize title updated:', data.prizeTitle);
+                }
+                // Save to localStorage for next load
+                localStorage.setItem('customPrizeTitle', data.prizeTitle);
+            }
+            
+            // Apply prize names
+            if (data.prizeNames) {
+                // Save to localStorage for next load
+                localStorage.setItem('customPrizeNames', JSON.stringify(data.prizeNames));
+                console.log('✓ Prize names saved:', data.prizeNames);
             }
         }
         

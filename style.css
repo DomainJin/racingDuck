@@ -597,10 +597,10 @@ h1 {
 
 .bank-top {
     position: absolute;
-    top: 0;
+    top: 0; /* 0% - Start of race track */
     left: 0;
     width: 100%;
-    height: 20%;
+    height: 15%;
     background-image: url('static/river_bank_top.png');
     background-repeat: repeat-x;
     background-size: auto 100%;
@@ -609,10 +609,10 @@ h1 {
 
 .race-river {
     position: absolute;
-    top: 20%;
+    top: 15%; /* 15% - Right after bank-top */
     left: 0;
     width: 100%;
-    height: 60%;
+    height: 70%;
     background-image: url('static/race.png');
     background-repeat: repeat-x;
     background-size: auto 100%;
@@ -759,10 +759,10 @@ h1 {
 
 .bank-bot {
     position: absolute;
-    top: 80%;
+    top: 85%; /* 85% - Right after race-river (15% + 70% = 85%) */
     left: 0;
     width: 100%;
-    height: 20%;
+    height: 15%;
     background-image: url('static/river_bank_bottom.png');
     background-repeat: repeat-x;
     background-size: auto 100%;
@@ -1098,47 +1098,105 @@ h1 {
 
 .result-panel.fullscreen {
     position: fixed;
-    top: 0;
-    left: 0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     width: 100vw;
-    height: 100vh;
+    height: calc(100vw * 5 / 20); /* 20:5 aspect ratio = 4:1 */
+    max-width: calc(100vh * 20 / 5);
+    max-height: 100vh;
     margin: 0;
-    border-radius: 0;
+    border-radius: 20px;
     z-index: 9999;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px;
+    padding: 2%;
     cursor: default;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .result-panel.fullscreen #resultTitle {
-    font-size: 4em;
-    margin-bottom: 40px;
+    font-size: 2.5vw;
+    margin: 0 0 1.5vh 0;
+    flex-shrink: 0;
+}
+
+.result-panel.fullscreen .winners-list {
+    width: 100%;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .result-panel.fullscreen .winners-list h3 {
-    font-size: 3em;
-    margin-bottom: 50px;
+    font-size: 2em;
+    margin-bottom: 30px;
 }
 
 .result-panel.fullscreen .winners-grid {
-    gap: 40px;
-    max-width: 1400px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 1vw;
+    width: 90%;
+    max-width: 90%;
+    height: auto;
+    padding: 0;
 }
 
 .result-panel.fullscreen .winner-card {
-    transform: scale(1.2);
+    width: auto;
+    min-width: 120px;
+    max-width: 180px;
+    padding: 1.5% 1.2%;
+    border-radius: 8px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.result-panel.fullscreen .winner-medal {
+    font-size: 3em;
+    margin: 0 0 0.3em 0;
+    line-height: 1;
+}
+
+.result-panel.fullscreen .winner-position {
+    font-size: 1em;
+    margin: 0 0 0.3em 0;
+    white-space: nowrap;
+}
+
+.result-panel.fullscreen .winner-duck-name {
+    font-size: 1.2em;
+    margin: 0.3em 0;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.2;
 }
 
 /* Victory Popup */
 .victory-popup {
     position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 100vw !important;
+    height: calc(100vw * 5 / 20) !important;
+    max-height: 100vh !important;
+    max-width: calc(100vh * 20 / 5) !important;
     z-index: 2147483647 !important;
     display: flex;
     align-items: center;
@@ -1161,6 +1219,7 @@ h1 {
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
+    border-radius: 20px;
     z-index: 1;
 }
 

@@ -94,12 +94,8 @@
             <button class="btn btn-small" onclick="game.resetHistory()" style="margin-top: 10px; width: 100%;">🔄 Restart (Clear History)</button>
         </div>
 
-        <!-- Results -->
-        <div class="result-panel hidden" id="resultPanel">
-            <h2 id="resultTitle">Results</h2>
-            <div id="resultMessage"></div>
-            
-            <!-- Result Panel Settings - Collapsible -->
+        <!-- Result Panel Settings - Collapsible -->
+        <div class="result-panel-settings" style="margin-top: 30px;">
             <div style="margin-top: 30px; border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px;">
                 <button class="btn btn-small" onclick="game.toggleResultPanelSettings()" style="background: #667eea; width: 100%;">⚙️ Result Panel Settings</button>
                 
@@ -183,6 +179,12 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Result Panel Preview - Independent -->
+        <div class="result-panel hidden" id="resultPanel" style="margin-top: 30px;">
+            <h2 id="resultTitle">Results</h2>
+            <div id="resultMessage"></div>
         </div>
 
         <!-- Race History -->
