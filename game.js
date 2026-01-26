@@ -1,5 +1,6 @@
-// Finish line offset - distance from duck nose to right edge of 150px icon
-const FINISH_LINE_OFFSET = 100;
+// Finish line offset - distance from duck center to right edge of 150px icon
+// 75px = half of 150px icon width (center of icon)
+const FINISH_LINE_OFFSET = 75;
 
 // Minimum participants required to start/continue a race
 const MINIMUM_PARTICIPANTS = 5;
@@ -402,7 +403,7 @@ class Duck {
                 return p.life > 0;
             });
             
-            // Visual duck nose is ~FINISH_LINE_OFFSET px before the right edge of 150px icon
+            // Visual duck center is ~FINISH_LINE_OFFSET px before the right edge of 150px icon
             // Allow duck to pass finish line and continue with deceleration (inertia)
             if (this.position >= this.trackLength - FINISH_LINE_OFFSET && !this.finished) {
                 this.finished = true;
@@ -727,6 +728,13 @@ class Game {
         return `Prize ${position}`;
     }
 
+    getPositionSuffix(pos) {
+        if (pos === 1) return 'st';
+        if (pos === 2) return 'nd';
+        if (pos === 3) return 'rd';
+        return 'th';
+    }
+
     loadPrizeNames() {
         const savedNames = localStorage.getItem('customPrizeNames');
         if (savedNames) {
@@ -749,6 +757,44 @@ class Game {
         if (container) {
             container.classList.toggle('hidden');
         }
+    }
+
+    applyRaceTrackAspectRatio(width, height) {
+        const raceTrack = document.getElementById('raceTrack');
+        const resultPanel = document.getElementById('resultPanel');
+        const victoryPopup = document.getElementById('victoryPopup');
+        const loadingDisplay = document.getElementById('loadingDisplay');
+        
+        // Create CSS rule for aspect ratio
+        const styleId = 'dynamic-aspect-ratio';
+        let styleEl = document.getElementById(styleId);
+        
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = styleId;
+            document.head.appendChild(styleEl);
+        }
+        
+        styleEl.textContent = `
+            .race-track {
+                height: calc(100vw * ${height} / ${width}) !important;
+                max-width: calc(100vh * ${width} / ${height}) !important;
+            }
+            .result-panel.fullscreen {
+                height: calc(100vw * ${height} / ${width}) !important;
+                max-width: calc(100vh * ${width} / ${height}) !important;
+            }
+            .victory-popup {
+                height: calc(100vw * ${height} / ${width}) !important;
+                max-width: calc(100vh * ${width} / ${height}) !important;
+            }
+            .loading-display {
+                height: calc(100vw * ${height} / ${width}) !important;
+                max-width: calc(100vh * ${width} / ${height}) !important;
+            }
+        `;
+        
+        console.log(`Applied aspect ratio ${width}:${height}`);
     }
 
     toggleResultBackground() {
@@ -793,13 +839,45 @@ class Game {
         const prizeTitle = localStorage.getItem('customPrizeTitle') || 'Prize Results';
         const prizeNames = JSON.parse(localStorage.getItem('customPrizeNames') || '{}');
         
+        // Get layout settings
+        const winnersGridWidthEl = document.getElementById('winnersGridWidth');
+        const cardGapEl = document.getElementById('cardGap');
+        const raceTrackAspectRatioEl = document.getElementById('raceTrackAspectRatio');
+        
+        const winnersGridWidth = winnersGridWidthEl ? winnersGridWidthEl.value : '95';
+        const cardGap = cardGapEl ? cardGapEl.value : '1.5';
+        
+        // Parse aspect ratio from input (e.g., "16:9" or "30:9")
+        let raceTrackWidth = '20';
+        let raceTrackHeight = '5';
+        
+        if (raceTrackAspectRatioEl && raceTrackAspectRatioEl.value) {
+            const aspectRatio = raceTrackAspectRatioEl.value.trim();
+            const match = aspectRatio.match(/^(\d+):(\d+)$/);
+            
+            if (match) {
+                raceTrackWidth = match[1];
+                raceTrackHeight = match[2];
+            } else {
+                alert('❌ Invalid aspect ratio format! Please use format like "16:9" or "30:9"');
+                return;
+            }
+        }
+        
+        // Save layout settings to localStorage
+        localStorage.setItem('winnersGridWidth', winnersGridWidth);
+        localStorage.setItem('cardGap', cardGap);
+        localStorage.setItem('raceTrackWidth', raceTrackWidth);
+        localStorage.setItem('raceTrackHeight', raceTrackHeight);
+        
+        // Apply race track aspect ratio
+        this.applyRaceTrackAspectRatio(raceTrackWidth, raceTrackHeight);
+        
         const resultPanel = document.getElementById('resultPanel');
         if (!resultPanel) {
             alert('Result panel not found!');
             return;
         }
-        
-        // Save settings to localStorage
         localStorage.setItem('resultPanelBackgroundType', bgType);
         localStorage.setItem('resultPanelBackgroundColor', bgColor);
         
@@ -839,7 +917,7 @@ class Game {
             const resultMessage = document.getElementById('resultMessage');
             if (resultMessage) {
                 let html = '<div class="winners-list">';
-                html += '<div class="winners-grid">';
+                html += `<div class="winners-grid" style="width: ${winnersGridWidth}%; gap: ${cardGap}%;">`;
                 this.winners.forEach((winner, index) => {
                     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
                     const position = index + 1;
@@ -871,7 +949,11 @@ class Game {
                 color: bgColor,
                 image: bgImage,
                 prizeTitle: prizeTitle,
-                prizeNames: prizeNames
+                prizeNames: prizeNames,
+                winnersGridWidth: winnersGridWidth,
+                cardGap: cardGap,
+                raceTrackWidth: raceTrackWidth,
+                raceTrackHeight: raceTrackHeight
             };
             
             this.displayChannel.postMessage({
@@ -882,7 +964,7 @@ class Game {
             console.log('Result panel settings sent to display:', settings);
         }
         
-        console.log('Result panel settings applied:', { bgType, bgColor, prizeTitle, prizeNames });
+        console.log('Result panel settings applied:', { bgType, bgColor, prizeTitle, prizeNames, winnersGridWidth, cardGap, raceTrackWidth, raceTrackHeight });
         alert('✓ Result panel settings updated!');
     }
     
@@ -892,6 +974,25 @@ class Game {
         // Reset to default
         document.getElementById('resultBgType').value = 'default';
         document.getElementById('resultBgColor').value = '#1a1a2e';
+        
+        // Reset layout settings
+        const winnersGridWidthEl = document.getElementById('winnersGridWidth');
+        const cardGapEl = document.getElementById('cardGap');
+        const raceTrackAspectRatioEl = document.getElementById('raceTrackAspectRatio');
+        
+        if (winnersGridWidthEl) {
+            winnersGridWidthEl.value = '95';
+            document.getElementById('winnersGridWidthValue').textContent = '95%';
+        }
+        if (cardGapEl) {
+            cardGapEl.value = '1.5';
+            document.getElementById('cardGapValue').textContent = '1.5%';
+        }
+        if (raceTrackAspectRatioEl) {
+            raceTrackAspectRatioEl.value = '20:5';
+            raceTrackAspectRatioEl.style.borderColor = '#667eea';
+            raceTrackAspectRatioEl.style.background = 'rgba(0,0,0,0.3)';
+        }
         
         // Reset prize title input
         const titleInput = document.getElementById('prizeTitleInput');
@@ -909,6 +1010,13 @@ class Game {
         localStorage.removeItem('resultPanelBackgroundImage');
         localStorage.removeItem('customPrizeTitle');
         localStorage.removeItem('customPrizeNames');
+        localStorage.removeItem('winnersGridWidth');
+        localStorage.removeItem('cardGap');
+        localStorage.removeItem('raceTrackWidth');
+        localStorage.removeItem('raceTrackHeight');
+        
+        // Reset race track aspect ratio
+        this.applyRaceTrackAspectRatio(20, 5);
         
         // Reset panel style completely
         if (resultPanel) {
@@ -944,6 +1052,41 @@ class Game {
         const titleInput = document.getElementById('prizeTitleInput');
         if (titleInput && savedTitle) {
             titleInput.value = savedTitle;
+        }
+        
+        // Load layout settings
+        const savedGridWidth = localStorage.getItem('winnersGridWidth') || '95';
+        const savedGap = localStorage.getItem('cardGap') || '1.5';
+        const savedTrackWidth = localStorage.getItem('raceTrackWidth') || '20';
+        const savedTrackHeight = localStorage.getItem('raceTrackHeight') || '5';
+        
+        const winnersGridWidthEl = document.getElementById('winnersGridWidth');
+        const cardGapEl = document.getElementById('cardGap');
+        const raceTrackAspectRatioEl = document.getElementById('raceTrackAspectRatio');
+        
+        if (winnersGridWidthEl) {
+            winnersGridWidthEl.value = savedGridWidth;
+            const widthValueEl = document.getElementById('winnersGridWidthValue');
+            if (widthValueEl) widthValueEl.textContent = savedGridWidth + '%';
+        }
+        
+        if (cardGapEl) {
+            cardGapEl.value = savedGap;
+            const gapValueEl = document.getElementById('cardGapValue');
+            if (gapValueEl) gapValueEl.textContent = savedGap + '%';
+        }
+        
+        if (raceTrackAspectRatioEl) {
+            raceTrackAspectRatioEl.value = `${savedTrackWidth}:${savedTrackHeight}`;
+        }
+        
+        // Apply race track aspect ratio
+        this.applyRaceTrackAspectRatio(savedTrackWidth, savedTrackHeight);
+        
+        if (cardGapEl) {
+            cardGapEl.value = savedGap;
+            const gapValueEl = document.getElementById('cardGapValue');
+            if (gapValueEl) gapValueEl.textContent = savedGap + '%';
         }
         
         // Load custom prize names
@@ -1197,7 +1340,7 @@ class Game {
         if (displayBtn) {
             displayBtn.style.pointerEvents = 'auto';
             displayBtn.style.opacity = '1';
-            displayBtn.textContent = '🖥️ Open Display (Right-click → New Tab)';
+            displayBtn.textContent = '🖥️ Open Display';
         }
         
         // Show success notification only if loading container exists (not in display mode)
@@ -1899,16 +2042,11 @@ class Game {
                 this.animationId = setInterval(() => this.animate(), 16.67);
             });
         } else {
-            // Control mode - show simple countdown before starting
-            this.showCountdown(() => {
-                // Set start time AFTER countdown finishes
-                this.startTime = Date.now();
-                console.log('=== RACE START ===');
-                console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-                this.soundManager.playStartSound();
-                this.soundManager.startRacingAmbiance();
-                this.animationId = setInterval(() => this.animate(), 16.67);
-            });
+            // Control mode - NO countdown, NO animation, just track timing
+            console.log('=== CONTROL PANEL - NO RACE VISUALIZATION ===');
+            console.log('Race will display on external display window only');
+            // Do NOT call showCountdown() or animate() in control mode
+            // Timing is handled via updateControlPanelTimer() called from proceedWithRaceStart()
         }
         
         // Update UI elements
@@ -2064,7 +2202,7 @@ class Game {
                             finishTime: parseFloat(finishTime)
                         }
                     });
-                }, 500);
+                }, 3000); // 3 second delay to see racer finish clearly
             }
         }
         
@@ -2084,8 +2222,10 @@ class Game {
             // Top N mode: Show winners panel only, no victory popup
             this.showWinnersPanel();
         } else {
-            // Normal mode: Show victory popup
-            this.showVictoryPopup(winner);
+            // Normal mode: Show victory popup after 3s delay
+            setTimeout(() => {
+                this.showVictoryPopup(winner);
+            }, 3000); // 3 second delay to see racer finish clearly
         }
         
         // Update stats
@@ -2377,22 +2517,35 @@ class Game {
             // Base speed scaled by average duck speed for realistic motion
             let backgroundSpeed = avgSpeed * 2.5; // Multiply for visual effect
             
-            if (distanceToFinish <= 500) {
-                // When within 500px of finish, gradually slow down camera and background
-                const slowdownFactor = distanceToFinish / 500; // 1.0 at 500px, 0.0 at finish
+            if (distanceToFinish <= 1000) {
+                // When within 1000px of finish, start panning camera to show finish line early
+                const finishLine = document.getElementById('finishLine');
                 
-                // Gradually move camera to center the finish line
-                targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
-                cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
-                
-                // Gradually slow down camera speed (from 0.15 to 0)
-                cameraSpeed = 0.15 * slowdownFactor;
-                
-                // Gradually slow down background proportionally (keep sync with ducks)
-                backgroundSpeed = backgroundSpeed * slowdownFactor;
+                if (distanceToFinish <= 500) {
+                    // When very close (500px), slow down everything
+                    const slowdownFactor = distanceToFinish / 500; // 1.0 at 500px, 0.0 at finish
+                    
+                    // Gradually move camera to center the finish line
+                    targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
+                    cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
+                    
+                    // Gradually slow down camera speed (from 0.15 to 0)
+                    cameraSpeed = 0.15 * slowdownFactor;
+                    
+                    // Gradually slow down background proportionally (keep sync with ducks)
+                    backgroundSpeed = backgroundSpeed * slowdownFactor;
+                } else {
+                    // Between 1000px and 500px: Pan camera forward to reveal finish line
+                    const panProgress = (1000 - distanceToFinish) / 500; // 0.0 at 1000px, 1.0 at 500px
+                    const panAmount = this.viewportWidth * 0.3 * panProgress; // Pan up to 30% of viewport
+                    
+                    // Camera follows leader but gradually shifts right
+                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panAmount;
+                    cameraMaxOffset = this.trackLength - this.viewportWidth;
+                    cameraSpeed = 0.15;
+                }
                 
                 // Show finish line
-                const finishLine = document.getElementById('finishLine');
                 finishLine.classList.remove('hidden');
                 finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
             } else {
@@ -2728,7 +2881,7 @@ class Game {
             winner._controlFinishTime = parseFloat(finishTime);
             setTimeout(() => {
                 this.showVictoryPopup(winner);
-            }, 1500); // 1.5 second delay to see finish
+            }, 3000); // 3 second delay to see racer finish clearly
         }
 
         this.stats.totalRaces++;
@@ -2826,13 +2979,30 @@ class Game {
         // Set winner name
         winnerNameEl.textContent = winner.name;
         
-        // Calculate finish time in seconds (elapsed time from race start) - use real time
-        const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
-        console.log('Victory popup - Start time:', this.startTime, 'Current:', Date.now(), 'Elapsed:', finishTime, 'Speed:', this.gameSpeed + 'x');
+        // Calculate finish time - prioritize synchronized time from control/display
+        let finishTime;
+        if (winner._displayFinishTime !== undefined) {
+            // Display mode: Use time sent from control
+            finishTime = winner._displayFinishTime.toFixed(2);
+            console.log('Victory popup - Using synchronized displayFinishTime:', finishTime);
+        } else if (winner._controlFinishTime !== undefined) {
+            // Control mode: Use previously calculated time
+            finishTime = winner._controlFinishTime.toFixed(2);
+            console.log('Victory popup - Using controlFinishTime:', finishTime);
+        } else {
+            // Fallback: Calculate from current time (may be inaccurate on display)
+            finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+            console.log('Victory popup - Calculated finishTime:', finishTime, 'Start:', this.startTime, 'Now:', Date.now());
+        }
+        
+        // Get prize name for the winner's position
+        const currentWinnerCount = this.winners.length + 1; // Position of this winner (1-based)
+        const prizeName = this.getPrizeName(currentWinnerCount);
+        
         winnerStatsEl.innerHTML = `
+            <p><strong>🏆 Prize:</strong> ${prizeName}</p>
             <p><strong>🕒 Time:</strong> ${finishTime}s</p>
-            <p><strong>📍 Position:</strong> 1st</p>
-            <p><strong>🏁 Total Racers:</strong> ${this.duckCount}</p>
+            <p><strong>📍 Position:</strong> ${currentWinnerCount}${this.getPositionSuffix(currentWinnerCount)}</p>
         `;
         
         // Show popup with animation
@@ -3000,10 +3170,14 @@ class Game {
         const prizeTitle = this.getPrizeTitle();
         document.getElementById('resultTitle').innerHTML = `🏆 ${prizeTitle}`;
         
+        // Get saved layout settings
+        const winnersGridWidth = localStorage.getItem('winnersGridWidth') || '95';
+        const cardGap = localStorage.getItem('cardGap') || '1.5';
+        
         let html = '<div class="winners-list">';
         
         if (this.winners.length > 0) {
-            html += '<div class="winners-grid">';
+            html += `<div class="winners-grid" style="width: ${winnersGridWidth}%; gap: ${cardGap}%;">`;
             this.winners.forEach((winner, index) => {
                 const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
                 const position = index + 1;
@@ -3131,8 +3305,8 @@ class Game {
     }
     
     toggleFullscreen() {
-        // If race not started yet, begin the race (only on display mode)
-        if (!this.raceStarted && !this.raceFinished && this.ducks.length > 0) {
+        // If race not started yet, begin the race (ONLY on display mode)
+        if (!this.raceStarted && !this.raceFinished && this.ducks.length > 0 && this.isDisplayMode) {
             this.beginRace();
             return;
         }

@@ -78,11 +78,7 @@
                 </a>
                 <small style="color: #FFD700; font-weight: bold;">📺 How to use:</small><br>
                 <small style="color: #888;">
-                    1. Right-click the button above → "Open link in new tab"<br>
-                    2. Wait for display tab to load icons (shows "DISPLAY READY")<br>
-                    3. Come back here and click "Start Race"<br>
-                    4. Display tab will show the race automatically
-                </small>
+                    
             </div>
             <button class="btn btn-primary" id="startRaceBtn" onclick="game.startRace()" disabled>Loading...</button>
         </div>
@@ -173,6 +169,34 @@
                         <small style="color: #888;">Upload JPG, PNG, or GIF</small>
                     </div>
                     
+                    <div style="margin-top: 15px; padding: 10px; background: rgba(102, 126, 234, 0.1); border-radius: 5px;">
+                        <h4 style="color: #667eea; font-size: 16px; margin: 0 0 10px 0;">📐 Layout Settings</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <label style="font-size: 14px; color: #fff;">Race Track Aspect Ratio:</label>
+                                <input type="text" id="raceTrackAspectRatio" value="20:5" placeholder="e.g., 16:9, 30:9, 21:9" 
+                                    style="padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #667eea; border-radius: 5px; color: #fff; font-size: 14px;"
+                                    oninput="validateAspectRatioInput(this)">
+                                <small style="color: #888; font-size: 12px;">Format: width:height (e.g., 16:9, 30:9)</small>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <label style="font-size: 14px; color: #fff;">Winners Grid Width:</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="winnersGridWidth" min="70" max="100" value="95" style="flex: 1;">
+                                    <span id="winnersGridWidthValue" style="min-width: 40px; font-size: 14px; color: #667eea;">95%</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <label style="font-size: 14px; color: #fff;">Card Gap:</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="range" id="cardGap" min="0.5" max="3" step="0.5" value="1.5" style="flex: 1;">
+                                    <span id="cardGapValue" style="min-width: 40px; font-size: 14px; color: #667eea;">1.5%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <small style="color: #888; margin-top: 8px; display: block;">Adjust race track dimensions and winner card layout</small>
+                    </div>
+                    
                     <div class="input-group">
                         <button class="btn btn-small" onclick="game.applyResultPanelSettings()" style="background: #667eea; margin-right: 10px;">✓ Apply</button>
                         <button class="btn btn-small" onclick="game.resetResultPanelSettings()" style="background: #888;">⟲ Reset</button>
@@ -186,6 +210,39 @@
             <h2 id="resultTitle">Results</h2>
             <div id="resultMessage"></div>
         </div>
+
+        <script>
+            // Update slider values display
+            document.getElementById('winnersGridWidth').addEventListener('input', (e) => {
+                document.getElementById('winnersGridWidthValue').textContent = e.target.value + '%';
+            });
+            document.getElementById('cardGap').addEventListener('input', (e) => {
+                document.getElementById('cardGapValue').textContent = e.target.value + '%';
+            });
+            
+            // Validate aspect ratio input format
+            function validateAspectRatioInput(input) {
+                const value = input.value.trim();
+                // Allow digits, colon, and spaces
+                const cleaned = value.replace(/[^0-9:]/g, '');
+                if (cleaned !== value) {
+                    input.value = cleaned;
+                }
+                
+                // Check if format is valid (e.g., "16:9", "30:9")
+                const match = cleaned.match(/^(\d+):(\d+)$/);
+                if (match) {
+                    input.style.borderColor = '#667eea';
+                    input.style.background = 'rgba(0,0,0,0.3)';
+                } else if (cleaned.length > 0) {
+                    input.style.borderColor = '#ff6b6b';
+                    input.style.background = 'rgba(255,107,107,0.1)';
+                } else {
+                    input.style.borderColor = '#667eea';
+                    input.style.background = 'rgba(0,0,0,0.3)';
+                }
+            }
+        </script>
 
         <!-- Race History -->
         <div class="history-panel hidden" id="historyPanel">
