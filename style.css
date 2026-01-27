@@ -895,6 +895,14 @@ h1 {
     justify-content: center;
 }
 
+.finish-line.visible {
+    display: flex;
+}
+
+.finish-line.hidden {
+    display: none;
+}
+
 .finish-line::after {
     content: 'FINISH';
     position: absolute;
@@ -1720,7 +1728,7 @@ h1 {
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
-    transform: translateY(-150%) scale(1.05);
+    transform: translateY(-5px) scale(1.05);
     box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4),
                 0 0 50px rgba(102, 126, 234, 0.3);
     border: 2px solid rgba(255, 255, 255, 0.5);

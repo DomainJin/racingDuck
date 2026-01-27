@@ -557,6 +557,9 @@ class Game {
         this.lastCameraOffset = 0; // Track last camera position to prevent backwards movement
         this.backgroundOffset = 0;
         this.targetBackgroundOffset = 0; // Target position for smooth background scrolling
+        this.finishLinePosition = 0; // Track finish line position for smooth reveal
+        this.finishLineRevealDistance = 3000; // Distance to start revealing finish line (early reveal)
+        this.duckVisualSpeed = 0; // Visual animation speed when background stops
         this.viewportWidth = 0;
         this.trackHeight = 0;
         this.isFullscreen = false;
@@ -1850,6 +1853,7 @@ class Game {
         this.lastCameraOffset = 0; // Reset last camera position
         this.backgroundOffset = 0;
         this.targetBackgroundOffset = 0; // Reset target background offset
+        this.finishLinePosition = 0; // Reset finish line position
         
         // Set initial CSS variable for duck size
         const initialDuckHeight = this.trackHeight * 0.5;
@@ -1895,6 +1899,7 @@ class Game {
         const finishLineEl = document.getElementById('finishLine');
         if (finishLineEl) {
             finishLineEl.classList.add('hidden');
+            finishLineEl.classList.remove('visible');
         }
         
         // Khởi tạo activeDuckNames nếu chưa có
@@ -2025,9 +2030,7 @@ class Game {
         
         // Only show countdown on display mode (removed auto-fullscreen to preserve aspect ratio)
         if (this.isDisplayMode) {
-            // Ẩn finish line (sẽ hiện lại khi gần đích)
-            const finishLine = document.getElementById('finishLine');
-            if (finishLine) finishLine.classList.add('hidden');
+            // Finish line will be revealed by animate() logic when close to finish
             
             // Show countdown directly without fullscreen
             this.showCountdown(() => {
@@ -2371,7 +2374,7 @@ class Game {
             if (this.frameCounter % 60 === 0) {
                 console.log(`[Control Panel] Time Left: ${timeLeft.toFixed(1)}s, Updated element:`, timeLeftEl.textContent);
             }
-        } else {
+        } else if (!this.isDisplayMode) {
             console.error('[Control Panel] timeLeft element NOT FOUND!');
         }
         
@@ -2516,43 +2519,60 @@ class Game {
             // Background speed synchronized with duck movement (like Dinosaur Game)
             // Base speed scaled by average duck speed for realistic motion
             let backgroundSpeed = avgSpeed * 2.5; // Multiply for visual effect
+            let duckVisualSpeed = 0; // Visual speed for duck animation when background stops
             
-            if (distanceToFinish <= 1000) {
-                // When within 1000px of finish, start panning camera to show finish line early
-                const finishLine = document.getElementById('finishLine');
-                
-                if (distanceToFinish <= 500) {
-                    // When very close (500px), slow down everything
-                    const slowdownFactor = distanceToFinish / 500; // 1.0 at 500px, 0.0 at finish
-                    
-                    // Gradually move camera to center the finish line
-                    targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
-                    cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
-                    
-                    // Gradually slow down camera speed (from 0.15 to 0)
-                    cameraSpeed = 0.15 * slowdownFactor;
-                    
-                    // Gradually slow down background proportionally (keep sync with ducks)
-                    backgroundSpeed = backgroundSpeed * slowdownFactor;
-                } else {
-                    // Between 1000px and 500px: Pan camera forward to reveal finish line
-                    const panProgress = (1000 - distanceToFinish) / 500; // 0.0 at 1000px, 1.0 at 500px
-                    const panAmount = this.viewportWidth * 0.3 * panProgress; // Pan up to 30% of viewport
-                    
-                    // Camera follows leader but gradually shifts right
-                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panAmount;
-                    cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.15;
+            // Simple finish line reveal logic:
+            // Show finish line when leader is 1 viewport width away from finish
+            // This way, finish line appears on the right edge of screen naturally
+            // As leader moves forward, camera follows and finish line moves left naturally
+            const finishLine = document.getElementById('finishLine');
+            
+            if (distanceToFinish <= this.viewportWidth) {
+                // Reveal finish line when it enters viewport range
+                if (finishLine && finishLine.classList.contains('hidden')) {
+                    finishLine.classList.remove('hidden');
+                    console.log(`[Finish Line] Revealed at distance: ${distanceToFinish.toFixed(0)}px (viewport: ${this.viewportWidth}px)`);
                 }
                 
-                // Show finish line
-                finishLine.classList.remove('hidden');
-                finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
+                // Update finish line position
+                if (finishLine) {
+                    finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
+                }
+            }
+            
+            // Camera and background logic based on distance to finish
+            if (distanceToFinish <= this.viewportWidth * 1.5) {
+                // When leader is within 1.5 viewport widths from finish
+                // Start positioning leader on right edge and gradually move to center
+                
+                if (distanceToFinish <= this.viewportWidth * 0.5) {
+                    // Very close (< 0.5 viewport): Center the finish line
+                    const slowdownFactor = distanceToFinish / (this.viewportWidth * 0.5);
+                    
+                    targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
+                    cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
+                    cameraSpeed = 0.15 * slowdownFactor;
+                    
+                    // Slow down background
+                    backgroundSpeed = backgroundSpeed * slowdownFactor;
+                    duckVisualSpeed = avgSpeed * (1.0 - slowdownFactor) * 0.5;
+                } else {
+                    // Between 1.5 and 0.5 viewport: Gradually move leader from right edge to center
+                    // Progress: 0.0 at 1.5 viewport, 1.0 at 0.5 viewport
+                    const transitionProgress = (this.viewportWidth * 1.5 - distanceToFinish) / this.viewportWidth;
+                    
+                    // Leader position on screen: from 80% (right edge) to 50% (center)
+                    const leaderScreenPosition = 0.8 - (transitionProgress * 0.3); // 0.8 -> 0.5
+                    
+                    targetCameraOffset = leader.position - (this.viewportWidth * leaderScreenPosition);
+                    cameraMaxOffset = this.trackLength - this.viewportWidth;
+                    cameraSpeed = 0.12; // Smooth transition
+                }
             } else {
-                // Camera follows leader normally (60% from left edge)
+                // Normal camera follow (leader at 60% from left)
                 targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
                 cameraMaxOffset = this.trackLength - this.viewportWidth;
-                cameraSpeed = 0.15; // Increased from 0.1 for smoother response
+                cameraSpeed = 0.15;
             }
             
             // Smooth camera target with lerp to prevent snapping when leader changes
@@ -2577,6 +2597,9 @@ class Game {
             this.targetBackgroundOffset += backgroundSpeed * this.deltaTime;
             const backgroundSmoothSpeed = 0.12; // Smooth background scrolling
             this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
+            
+            // Store visual speed for duck animation
+            this.duckVisualSpeed = duckVisualSpeed;
         } else {
             // If no leader or race not active, calculate average speed of all ducks
             const allDucksSpeed = this.ducks.length > 0 
@@ -2585,6 +2608,8 @@ class Game {
             this.targetBackgroundOffset += (allDucksSpeed * 2.5) * this.deltaTime;
             const backgroundSmoothSpeed = 0.12;
             this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
+            
+            this.duckVisualSpeed = 0;
         }
         
         this.updateDuckPositions();
@@ -2653,7 +2678,9 @@ class Game {
                 }
                 
                 // Update visible ducks
-                duckEl.style.left = `${screenX}px`;
+                // Add visual animation offset when background stops (creates illusion of continued movement)
+                const visualOffset = this.duckVisualSpeed ? Math.sin(Date.now() * 0.005) * this.duckVisualSpeed * 5 : 0;
+                duckEl.style.left = `${screenX + visualOffset}px`;
                 duckEl.style.display = '';
                 
                 const wobble = duck.getWobble(Date.now());
