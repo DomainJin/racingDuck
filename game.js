@@ -2346,7 +2346,12 @@ class Game {
                 console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
                 this.soundManager.playStartSound();
                 this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
-                this.animationId = setInterval(() => this.animate(), 16.67);
+                
+                // Reset frame time tracking and start animation loop
+                this.lastFrameTime = Date.now();
+                this.lastUIUpdate = 0;
+                this.rankingUpdateCounter = 0;
+                this.animationId = requestAnimationFrame((ts) => this.animate(ts));
             });
         } else {
             // Control mode - NO countdown, NO animation, just track timing
@@ -2700,7 +2705,10 @@ class Game {
             safeElementAction('pauseBtn', el => el.disabled = false);
             safeElementAction('resumeBtn', el => el.disabled = true);
             safeElementAction('raceStatus', el => el.textContent = 'Racing!');
-            this.animationId = setInterval(() => this.animate(), 16.67);
+            
+            // Reset frame time tracking
+            this.lastFrameTime = Date.now();
+            this.animationId = requestAnimationFrame((ts) => this.animate(ts));
             
             // Send resume command to display window
             if (this.displayChannel && !this.isDisplayMode) {
@@ -2716,19 +2724,23 @@ class Game {
     animate(timestamp) {
         if (!this.raceStarted || this.raceFinished || this.racePaused) return;
 
-        // Use setInterval instead of requestAnimationFrame to keep running in background
-        // requestAnimationFrame is throttled/paused when tab is inactive
+        // Continue animation loop with requestAnimationFrame
+        this.animationId = requestAnimationFrame((ts) => this.animate(ts));
 
         // Calculate delta time for frame-independent movement
         const currentTime = Date.now();
         if (!this.lastFrameTime) this.lastFrameTime = currentTime;
         const frameTime = currentTime - this.lastFrameTime;
+        
+        // Skip frame if less than 8ms passed (cap at ~120fps)
+        if (frameTime < 8) return;
+        
         this.lastFrameTime = currentTime;
         
         // Delta time multiplier: 1.0 at 60fps, >1.0 for slower fps, <1.0 for faster fps
         this.deltaTime = frameTime / this.targetFrameTime;
-        // Clamp delta time to prevent huge jumps (max 4x, min 0.25x)
-        this.deltaTime = Math.max(0.25, Math.min(4.0, this.deltaTime));
+        // Clamp delta time to prevent huge jumps (max 4x, min 0.5x for smoother performance)
+        this.deltaTime = Math.max(0.5, Math.min(4.0, this.deltaTime));
         
         // Apply game speed multiplier
         this.deltaTime *= this.gameSpeed;
@@ -2738,42 +2750,38 @@ class Game {
         const elapsed = (Date.now() - this.startTime) / 1000;
         const timeLeft = Math.max(0, this.raceDuration - elapsed);
         
-        // Update time left on control panel (index.html)
-        const timeLeftEl = document.getElementById('timeLeft');
-        if (timeLeftEl) {
-            timeLeftEl.textContent = `${timeLeft.toFixed(1)}s`;
-            // Debug: Log every 60 frames (~1 second)
-            if (!this.frameCounter) this.frameCounter = 0;
-            this.frameCounter++;
-            if (this.frameCounter % 60 === 0) {
-                console.log(`[Control Panel] Time Left: ${timeLeft.toFixed(1)}s, Updated element:`, timeLeftEl.textContent);
+        // Update time left on control panel (index.html) - throttled to reduce DOM operations
+        if (!this.lastUIUpdate || currentTime - this.lastUIUpdate > 50) { // Update UI every 50ms
+            this.lastUIUpdate = currentTime;
+            
+            const timeLeftEl = document.getElementById('timeLeft');
+            if (timeLeftEl) {
+                timeLeftEl.textContent = `${timeLeft.toFixed(1)}s`;
             }
-        } else if (!this.isDisplayMode) {
-            console.error('[Control Panel] timeLeft element NOT FOUND!');
-        }
-        
-        // Send update to display window
-        if (this.displayChannel && !this.isDisplayMode) {
-            this.displayChannel.postMessage({
-                type: 'RACE_UPDATE',
-                data: {
-                    timeLeft,
-                    raceNumber: this.currentRaceNumber,
-                    status: 'Racing!'
+            
+            // Send update to display window
+            if (this.displayChannel && !this.isDisplayMode) {
+                this.displayChannel.postMessage({
+                    type: 'RACE_UPDATE',
+                    data: {
+                        timeLeft,
+                        raceNumber: this.currentRaceNumber,
+                        status: 'Racing!'
+                    }
+                });
+            }
+            
+            // Big timer shows elapsed time (counting up)
+            const bigTimerEl = document.getElementById('bigTimer');
+            if (bigTimerEl) {
+                const timerDisplay = bigTimerEl.querySelector('.timer-display');
+                if (timerDisplay) {
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = Math.floor(elapsed % 60);
+                    const milliseconds = Math.floor((elapsed % 1) * 100);
+                    timerDisplay.textContent = 
+                        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(2, '0')}`;
                 }
-            });
-        }
-        
-        // Big timer shows elapsed time (counting up) - only update if element exists
-        const bigTimerEl = document.getElementById('bigTimer');
-        if (bigTimerEl) {
-            const timerDisplay = bigTimerEl.querySelector('.timer-display');
-            if (timerDisplay) {
-                const minutes = Math.floor(elapsed / 60);
-                const seconds = Math.floor(elapsed % 60);
-                const milliseconds = Math.floor((elapsed % 1) * 100);
-                timerDisplay.textContent = 
-                    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(2, '0')}`;
             }
         }
 
@@ -2859,35 +2867,56 @@ class Game {
             return;
         }
 
-        // Performance optimization: Only update ducks near viewport
+        // Performance optimization: Aggressive viewport culling for large duck counts
         const viewportStart = this.cameraOffset - this.viewportBuffer;
         const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
+        const duckCount = this.ducks.length;
+        const isLargeRace = duckCount > 50;
         
-        this.ducks.forEach(duck => {
+        // Update rankings less frequently for large races (every 3 frames)
+        if (!this.rankingUpdateCounter) this.rankingUpdateCounter = 0;
+        this.rankingUpdateCounter++;
+        const shouldUpdateRankings = !isLargeRace || this.rankingUpdateCounter % 3 === 0;
+        
+        this.ducks.forEach((duck, index) => {
             // Always update finished ducks and ducks near viewport
             const isNearViewport = duck.position >= viewportStart && duck.position <= viewportEnd;
-            const shouldUpdate = duck.finished || isNearViewport || duck.position >= viewportEnd - 1000; // Always update leaders
+            
+            // For large races, only update:
+            // 1. Top 20 ducks (leaders)
+            // 2. Ducks in viewport
+            // 3. Finished ducks
+            // 4. Every 5th duck for basic position tracking
+            const isLeader = index < 20;
+            const shouldUpdate = duck.finished || isNearViewport || isLeader || (!isLargeRace && index % 5 === 0);
             
             if (shouldUpdate) {
-                const currentRank = this.rankings.findIndex(d => d.id === duck.id) + 1 || this.ducks.length;
+                const currentRank = shouldUpdateRankings ? (this.rankings.findIndex(d => d.id === duck.id) + 1 || duckCount) : (duck.lastRank || duckCount);
                 
                 // Check if we're in slowdown zone (within 500px of finish)
                 const leader = this.rankings[0];
                 const distanceToFinish = leader ? this.trackLength - leader.position : Infinity;
                 const inSlowdownZone = distanceToFinish <= 500;
                 
-                duck.update(timestamp || Date.now(), currentRank, this.ducks.length, this.deltaTime, inSlowdownZone);
+                duck.update(timestamp || Date.now(), currentRank, duckCount, this.deltaTime, inSlowdownZone);
+                duck.lastRank = currentRank; // Cache rank for next frame
             } else {
-                // Lightweight update for off-screen ducks - only position
+                // Lightweight update for off-screen ducks - only position, no animation
                 if (!duck.finished) {
                     duck.position += (duck.speed || duck.baseSpeed) * this.deltaTime;
+                    // Skip DOM updates completely for culled ducks
+                    if (duck.element) {
+                        duck.element.style.display = 'none';
+                    }
                 }
             }
         });
 
-        const oldRankings = [...this.rankings];
-        this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
-        // this.checkHighlights(oldRankings, this.rankings);
+        // Update rankings only when needed
+        if (shouldUpdateRankings) {
+            const oldRankings = [...this.rankings];
+            this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
+        }
         
         if (this.rankings.length > 0) {
             const leader = this.rankings[0];
