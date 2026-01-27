@@ -451,7 +451,8 @@ class Game {
         this.gameSpeed = 1.0; // Game speed multiplier: 0.25x to 3x
         this.raceMode = 'normal'; // 'normal' or 'topN'
         this.winnerCount = 3; // For topN mode
-        this.winners = []; // Array to store multiple winners
+        this.winners = []; // Array to store accumulated winners across races
+        this.currentRaceWinners = []; // Array to store winners for current race only (topN mode)
         
         this.trackContainer = null;
         this.duckElements = new Map();
@@ -558,6 +559,8 @@ class Game {
         this.backgroundOffset = 0;
         this.targetBackgroundOffset = 0; // Target position for smooth background scrolling
         this.finishLinePosition = 0; // Track finish line position for smooth reveal
+        this.finishLinePreviewShown = false; // Track if finish line preview animation is done
+        this.finishLinePreviewStartTime = 0; // When preview started
         this.finishLineRevealDistance = 3000; // Distance to start revealing finish line (early reveal)
         this.duckVisualSpeed = 0; // Visual animation speed when background stops
         this.viewportWidth = 0;
@@ -570,7 +573,9 @@ class Game {
         this.raceHistory = [];
         
         this.duckNames = [];
+        this.duckCodes = []; // Store employee codes
         this.activeDuckNames = []; // Danh sách vịt đang tham gia (sẽ giảm dần)
+        this.activeDuckCodes = []; // Mã NV tương ứng
         this.winners = this.loadWinners(); // Danh sách các vịt đã thắng
         this.excludedDucks = []; // Danh sách các vịt bị loại
         
@@ -636,7 +641,14 @@ class Game {
         }, 500);
         
         // this.updateStatsDisplay(); // Stats panel removed
-        this.updateHistoryWin(); // Load history from localStorage
+        // Update history after DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                this.updateHistoryWin();
+            });
+        } else {
+            this.updateHistoryWin();
+        }
         
         // Load result panel settings for both control and display mode
         this.loadResultPanelSettings();
@@ -707,23 +719,139 @@ class Game {
         }
     }
 
+    // Add a new prize name field
+    addPrizeNameField(position = null) {
+        const container = document.getElementById('prizeNamesContainer');
+        if (!container) return;
+
+        // If no position specified, find the next position
+        if (position === null) {
+            const existingFields = container.querySelectorAll('.prize-name-field');
+            position = existingFields.length + 1;
+        }
+
+        // Create field HTML
+        const fieldDiv = document.createElement('div');
+        fieldDiv.className = 'prize-name-field';
+        fieldDiv.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        fieldDiv.innerHTML = `
+            <label style="min-width: 70px; font-size: 14px; color: #fff;">Prize ${position}:</label>
+            <input type="text" id="prizeName${position}" placeholder="Prize ${position}" maxlength="50" 
+                   style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;"
+                   onchange="game.savePrizeNames()">
+            <button onclick="game.removePrizeNameField(${position})" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px; background: rgba(255,0,0,0.3);">Remove</button>
+        `;
+        
+        container.appendChild(fieldDiv);
+    }
+
+    // Remove a prize name field
+    removePrizeNameField(position) {
+        const container = document.getElementById('prizeNamesContainer');
+        if (!container) return;
+
+        const fields = Array.from(container.querySelectorAll('.prize-name-field'));
+        if (fields.length <= 1) {
+            alert('Must keep at least one prize name field!');
+            return;
+        }
+
+        // Remove the field
+        const field = fields.find(f => f.querySelector(`#prizeName${position}`));
+        if (field) {
+            field.remove();
+        }
+
+        // Save after removing
+        this.savePrizeNames();
+    }
+
+    // Sort prize names (ascending 1,2,3... or descending N...3,2,1)
+    sortPrizeNames(order = 'asc') {
+        const container = document.getElementById('prizeNamesContainer');
+        if (!container) return;
+
+        // Get all prize fields with their data
+        const fields = Array.from(container.querySelectorAll('.prize-name-field'));
+        const prizeData = fields.map(field => {
+            const input = field.querySelector('input[id^="prizeName"]');
+            const position = parseInt(input.id.replace('prizeName', ''));
+            return {
+                position: position,
+                value: input.value.trim()
+            };
+        });
+
+        // Sort by position
+        prizeData.sort((a, b) => {
+            if (order === 'asc') {
+                return a.position - b.position;
+            } else {
+                return b.position - a.position;
+            }
+        });
+
+        // Clear container
+        container.innerHTML = '';
+
+        // Re-create fields in sorted order
+        prizeData.forEach(data => {
+            this.addPrizeNameField(data.position);
+            const input = document.getElementById(`prizeName${data.position}`);
+            if (input && data.value) {
+                input.value = data.value;
+            }
+        });
+
+        // Save sort order to localStorage
+        localStorage.setItem('prizeNamesSortOrder', order);
+
+        console.log(`✓ Prize names sorted ${order === 'asc' ? 'ascending (1-N)' : 'descending (N-1)'}`);
+    }
+
     savePrizeNames() {
         const prizeNames = {};
-        for (let i = 1; i <= 10; i++) {
-            const input = document.getElementById(`prizeName${i}`);
-            if (input && input.value.trim()) {
-                prizeNames[i] = input.value.trim();
+        const container = document.getElementById('prizeNamesContainer');
+        if (!container) return;
+
+        const inputs = container.querySelectorAll('input[id^="prizeName"]');
+        inputs.forEach(input => {
+            const position = parseInt(input.id.replace('prizeName', ''));
+            if (input.value.trim()) {
+                prizeNames[position] = input.value.trim();
             }
-        }
+        });
         localStorage.setItem('customPrizeNames', JSON.stringify(prizeNames));
     }
 
     getPrizeName(position) {
         const savedNames = localStorage.getItem('customPrizeNames');
+        const sortOrder = localStorage.getItem('prizeNamesSortOrder') || 'asc';
+        
         if (savedNames) {
             try {
                 const prizeNames = JSON.parse(savedNames);
-                return prizeNames[position] || `Prize ${position}`;
+                const positions = Object.keys(prizeNames).map(k => parseInt(k)).sort((a, b) => a - b);
+                
+                if (positions.length === 0) {
+                    return `Prize ${position}`;
+                }
+                
+                // Calculate actual prize position based on sort order
+                let actualPosition;
+                if (sortOrder === 'desc') {
+                    // Descending: Prize 4, 3, 2, 1 (race 1 gets highest prize)
+                    actualPosition = positions[positions.length - position];
+                } else {
+                    // Ascending: Prize 1, 2, 3, 4 (race 1 gets lowest prize)
+                    actualPosition = positions[position - 1];
+                }
+                
+                // Return prize name or default
+                if (actualPosition && prizeNames[actualPosition]) {
+                    return prizeNames[actualPosition];
+                }
+                return `Prize ${actualPosition || position}`;
             } catch (e) {
                 return `Prize ${position}`;
             }
@@ -738,21 +866,70 @@ class Game {
         return 'th';
     }
 
+    // Get display name with employee code (if available)
+    getDisplayName(duck) {
+        if (duck.code) {
+            return `${duck.code} - ${duck.name}`;
+        }
+        return duck.name;
+    }
+
     loadPrizeNames() {
+        const container = document.getElementById('prizeNamesContainer');
+        if (!container) return;
+
+        // Clear existing fields
+        container.innerHTML = '';
+
         const savedNames = localStorage.getItem('customPrizeNames');
+        const savedSortOrder = localStorage.getItem('prizeNamesSortOrder') || 'asc';
+        let prizeNames = {};
+        
         if (savedNames) {
             try {
-                const prizeNames = JSON.parse(savedNames);
-                for (let i = 1; i <= 10; i++) {
-                    const input = document.getElementById(`prizeName${i}`);
-                    if (input && prizeNames[i]) {
-                        input.value = prizeNames[i];
-                    }
-                }
+                prizeNames = JSON.parse(savedNames);
             } catch (e) {
-                console.error('Failed to load prize names:', e);
+                console.error('Failed to parse prize names:', e);
             }
         }
+
+        // Get all positions (saved + ensure at least first 3)
+        const positions = Object.keys(prizeNames).map(k => parseInt(k));
+        const maxPosition = positions.length > 0 ? Math.max(...positions) : 0;
+        const fieldsToShow = Math.max(maxPosition, 3);
+
+        // Create array of positions to display
+        let displayPositions = [];
+        for (let i = 1; i <= fieldsToShow; i++) {
+            displayPositions.push(i);
+        }
+
+        // Sort display order based on saved sort order
+        if (savedSortOrder === 'desc') {
+            displayPositions.reverse();
+        }
+
+        // Create fields in sorted order
+        displayPositions.forEach(position => {
+            this.addPrizeNameField(position);
+            const input = document.getElementById(`prizeName${position}`);
+            if (input && prizeNames[position]) {
+                input.value = prizeNames[position];
+            }
+        });
+
+        // If no fields exist, add at least 3 default fields
+        if (fieldsToShow === 0) {
+            displayPositions = [1, 2, 3];
+            if (savedSortOrder === 'desc') {
+                displayPositions.reverse();
+            }
+            displayPositions.forEach(i => {
+                this.addPrizeNameField(i);
+            });
+        }
+
+        console.log(`✓ Prize names loaded with sort order: ${savedSortOrder}`);
     }
 
     toggleResultPanelSettings() {
@@ -1566,25 +1743,43 @@ class Game {
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
                     
                     this.duckNames = [];
+                    this.duckCodes = []; // Store employee codes separately
                     
                     // Bỏ qua header (dòng 0), đọc từ dòng 1
+                    // Cột 0: STT, Cột 1: Mã NV, Cột 2: Họ và tên
                     for (let i = 1; i < jsonData.length; i++) {
                         const row = jsonData[i];
-                        if (row && row.length >= 2 && row[1]) {
-                            const name = String(row[1]).trim();
-                            if (name) {
+                        if (row && row.length >= 3 && row[1] && row[2]) {
+                            const code = String(row[1]).trim(); // Mã NV
+                            const name = String(row[2]).trim(); // Họ và tên
+                            if (code && name) {
+                                // Internal name is just the full name
                                 this.duckNames.push(name);
+                                // Store code separately for display
+                                this.duckCodes.push(code);
+                                console.log(`Loaded row ${i}: Code=${code}, Name=${name}`);
                             }
                         }
                     }
                     
                     if (this.duckNames.length > 0) {
                         this.activeDuckNames = [...this.duckNames];
+                        this.activeDuckCodes = [...this.duckCodes];
                         
                         if (this.winners.length > 0) {
                             const winnerNames = this.winners.map(w => w.name);
-                            this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                            // Filter both arrays together
+                            const filteredData = this.duckNames
+                                .map((name, index) => ({ name, code: this.duckCodes[index] }))
+                                .filter(item => !winnerNames.includes(item.name));
+                            this.activeDuckNames = filteredData.map(item => item.name);
+                            this.activeDuckCodes = filteredData.map(item => item.code);
                         }
+                        
+                        // Save to localStorage for persistence
+                        localStorage.setItem('duckNames', JSON.stringify(this.duckNames));
+                        localStorage.setItem('duckCodes', JSON.stringify(this.duckCodes));
+                        localStorage.setItem('excelFileName', file.name);
                         
                         document.getElementById('duckCount').value = this.duckNames.length;
                         alert(`Đã tải ${this.duckNames.length} tên từ file Excel!`);
@@ -1605,28 +1800,41 @@ class Game {
                 const lines = text.split('\n');
                 
                 this.duckNames = [];
+                this.duckCodes = [];
                 
+                // Cột 0: STT, Cột 1: Mã NV, Cột 2: Họ và tên
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
                     
                     const columns = line.split(',');
-                    if (columns.length >= 2) {
-                        const stt = columns[0].trim();
-                        const name = columns[1].trim();
-                        if (stt && name) {
+                    if (columns.length >= 3) {
+                        const code = columns[1].trim(); // Mã NV
+                        const name = columns[2].trim(); // Họ và tên
+                        if (code && name) {
                             this.duckNames.push(name);
+                            this.duckCodes.push(code);
                         }
                     }
                 }
                 
                 if (this.duckNames.length > 0) {
                     this.activeDuckNames = [...this.duckNames];
+                    this.activeDuckCodes = [...this.duckCodes];
                     
                     if (this.winners.length > 0) {
                         const winnerNames = this.winners.map(w => w.name);
-                        this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                        const filteredData = this.duckNames
+                            .map((name, index) => ({ name, code: this.duckCodes[index] }))
+                            .filter(item => !winnerNames.includes(item.name));
+                        this.activeDuckNames = filteredData.map(item => item.name);
+                        this.activeDuckCodes = filteredData.map(item => item.code);
                     }
+                    
+                    // Save to localStorage for persistence
+                    localStorage.setItem('duckNames', JSON.stringify(this.duckNames));
+                    localStorage.setItem('duckCodes', JSON.stringify(this.duckCodes));
+                    localStorage.setItem('excelFileName', file.name);
                     
                     document.getElementById('duckCount').value = this.duckNames.length;
                     alert(`Đã tải ${this.duckNames.length} tên từ file CSV!`);
@@ -1637,6 +1845,46 @@ class Game {
             
             // Chỉ định encoding UTF-8 để đọc tiếng Việt đúng
             reader.readAsText(file, 'UTF-8');
+        }
+    }
+
+    // Load saved Excel/CSV data from localStorage
+    loadSavedData() {
+        try {
+            const savedNames = localStorage.getItem('duckNames');
+            const savedCodes = localStorage.getItem('duckCodes');
+            const savedFileName = localStorage.getItem('excelFileName');
+            
+            if (savedNames && savedCodes) {
+                this.duckNames = JSON.parse(savedNames);
+                this.duckCodes = JSON.parse(savedCodes);
+                this.activeDuckNames = [...this.duckNames];
+                this.activeDuckCodes = [...this.duckCodes];
+                
+                // Filter out winners if any exist
+                if (this.winners.length > 0) {
+                    const winnerNames = this.winners.map(w => w.name);
+                    const filteredData = this.duckNames
+                        .map((name, index) => ({ name, code: this.duckCodes[index] }))
+                        .filter(item => !winnerNames.includes(item.name));
+                    this.activeDuckNames = filteredData.map(item => item.name);
+                    this.activeDuckCodes = filteredData.map(item => item.code);
+                }
+                
+                document.getElementById('duckCount').value = this.duckNames.length;
+                console.log(`✓ Restored ${this.duckNames.length} names from localStorage${savedFileName ? ` (${savedFileName})` : ''}`);
+                
+                // Show notification
+                const fileInput = document.getElementById('duckNamesFile');
+                if (fileInput && savedFileName) {
+                    const label = fileInput.parentElement.querySelector('label');
+                    if (label) {
+                        label.textContent = `Excel File (Loaded: ${savedFileName}):`;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error loading saved data:', e);
         }
     }
 
@@ -1734,6 +1982,7 @@ class Game {
                 gameSpeed: this.gameSpeed, // Send game speed to display
                 theme: this.currentTheme,
                 duckNames: [...this.activeDuckNames], // Clone array
+                duckCodes: [...this.activeDuckCodes], // Send employee codes
                 startTime: this.startTime // Send synchronized start time
             };
             
@@ -1775,6 +2024,31 @@ class Game {
             
             console.log(`🏁 Race Setup - Mode: ${this.raceMode}, Winner Count: ${this.winnerCount}, Duration: ${this.raceDuration}s, Speed: ${this.gameSpeed}x`);
             
+            // Pre-check available participants before setup
+            let availableCount = 0;
+            if (this.duckNames.length > 0) {
+                availableCount = this.duckNames.length;
+            } else {
+                availableCount = this.duckCount;
+            }
+            
+            // Subtract winners
+            if (this.winners.length > 0) {
+                availableCount -= this.winners.length;
+            }
+            
+            console.log(`Available participants: ${availableCount} (Requested: ${this.duckCount}, Winners removed: ${this.winners.length})`);
+            
+            if (availableCount < MINIMUM_PARTICIPANTS) {
+                alert(`Not enough participants!\n\nAvailable: ${availableCount}\nRequired: at least ${MINIMUM_PARTICIPANTS}\nWinners (excluded): ${this.winners.length}\n\nPlease reduce number of racers or reset winner history.`);
+                return;
+            }
+            
+            if (availableCount < this.duckCount) {
+                const confirmed = confirm(`Only ${availableCount} participants available (${this.winners.length} winners excluded).\n\nDo you want to continue with ${availableCount} racers instead of ${this.duckCount}?`);
+                if (!confirmed) return;
+            }
+            
             if (soundToggleEl) {
                 const enabled = soundToggleEl.checked;
                 this.soundManager.setEnabled(enabled);
@@ -1790,12 +2064,21 @@ class Game {
         }
         
         // Load persistent winners from localStorage to preserve across races
-        // Don't reset to [] - need to accumulate winners across multiple races
+        // For Top N mode: Reset winners array at start of new race to collect NEW winners
+        // For Normal mode: Keep accumulated winners from previous races
         const savedWinners = this.loadWinners();
-        if (savedWinners && savedWinners.length > 0) {
-            this.winners = savedWinners;
+        if (this.raceMode === 'topN') {
+            // Top N mode: Start fresh for this race, but keep history for display
+            this.currentRaceWinners = []; // Track winners for current race only
+            this.winners = savedWinners || []; // Keep historical winners
+            console.log(`Top N mode: Starting fresh race. Historical winners: ${this.winners.length}`);
         } else {
-            this.winners = [];
+            // Normal mode: Accumulate winners across races
+            if (savedWinners && savedWinners.length > 0) {
+                this.winners = savedWinners;
+            } else {
+                this.winners = [];
+            }
         }
 
         if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
@@ -1854,6 +2137,8 @@ class Game {
         this.backgroundOffset = 0;
         this.targetBackgroundOffset = 0; // Reset target background offset
         this.finishLinePosition = 0; // Reset finish line position
+        this.finishLinePreviewShown = false; // Reset preview state
+        this.finishLinePreviewStartTime = 0; // Reset preview timer
         
         // Set initial CSS variable for duck size
         const initialDuckHeight = this.trackHeight * 0.5;
@@ -1902,44 +2187,63 @@ class Game {
             finishLineEl.classList.remove('visible');
         }
         
-        // Khởi tạo activeDuckNames nếu chưa có
-        if (this.activeDuckNames.length === 0) {
-            if (this.duckNames.length > 0) {
-                // Có file CSV đã upload
-                this.activeDuckNames = [...this.duckNames];
-                
-                // Loại bỏ các vịt đã thắng
-                if (this.winners.length > 0) {
-                    const winnerNames = this.winners.map(w => w.name);
-                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
-                }
-            } else {
-                // Không có file, tạo tên mặc định
-                for (let i = 1; i <= this.duckCount; i++) {
-                    this.activeDuckNames.push(`Racer #${i}`);
-                }
-                
-                // Loại bỏ các vịt số đã thắng
-                if (this.winners.length > 0) {
-                    const winnerNames = this.winners.map(w => w.name);
-                    this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
-                }
+        // Rebuild activeDuckNames from duckNames, excluding winners
+        // This ensures we always start with correct list after mode changes
+        if (this.duckNames.length > 0) {
+            // Có file CSV đã upload - rebuild từ full list
+            this.activeDuckNames = [...this.duckNames];
+            this.activeDuckCodes = [...this.duckCodes];
+        } else {
+            // Không có file - rebuild full list với số lượng duckCount mới
+            this.activeDuckNames = [];
+            this.activeDuckCodes = [];
+            for (let i = 1; i <= this.duckCount; i++) {
+                this.activeDuckNames.push(`Racer #${i}`);
+                this.activeDuckCodes.push(`R${i}`);
             }
         }
         
-        // Lấy danh sách vịt hiện tại
-        let currentDucks = [...this.activeDuckNames];
+        // Remove winners from active list
+        if (this.winners.length > 0) {
+            const winnerNames = this.winners.map(w => w.name);
+            // Filter both arrays together
+            const filteredData = this.activeDuckNames
+                .map((name, index) => ({ 
+                    name, 
+                    code: this.activeDuckCodes[index] || '' 
+                }))
+                .filter(item => !winnerNames.includes(item.name));
+            this.activeDuckNames = filteredData.map(item => item.name);
+            this.activeDuckCodes = filteredData.map(item => item.code);
+            console.log(`Removed ${this.winners.length} winners from active list. Remaining: ${this.activeDuckNames.length}`);
+        }
         
-        // Cập nhật duckCount theo số vịt hiện tại
-        this.duckCount = currentDucks.length;
+        // Lấy danh sách vịt hiện tại (limited by duckCount setting)
+        let currentDucks = this.activeDuckNames.slice(0, this.duckCount);
+        let currentCodes = this.activeDuckCodes.slice(0, this.duckCount);
         
-        for (let i = 1; i <= this.duckCount; i++) {
+        console.log(`Active ducks available: ${this.activeDuckNames.length}`);
+        console.log(`First 5 active ducks:`, this.activeDuckNames.slice(0, 5));
+        console.log(`First 5 active codes:`, this.activeDuckCodes.slice(0, 5));
+        
+        // Update actual duck count to match available ducks
+        const actualDuckCount = currentDucks.length;
+        console.log(`Setting up race: Requested ${this.duckCount} ducks, Available ${this.activeDuckNames.length}, Using ${actualDuckCount}`);
+        
+        if (actualDuckCount < MINIMUM_PARTICIPANTS) {
+            alert(`Not enough participants! Only ${actualDuckCount} available (need at least ${MINIMUM_PARTICIPANTS}). Please reset winners or add more participants.`);
+            return;
+        }
+        
+        for (let i = 1; i <= actualDuckCount; i++) {
             const duckName = currentDucks[i - 1];
+            const duckCode = currentCodes[i - 1] || '';
             const duck = new Duck(i, this.trackLength, duckName);
+            duck.code = duckCode; // Store employee code
             duck.randomizeSpeed();
             this.ducks.push(duck);
             
-            console.log(`Created duck ${i}/${this.duckCount}: ${duckName}`);
+            console.log(`Created duck ${i}/${actualDuckCount}: ${duckCode} - ${duckName}`);
             
             // Don't create elements upfront for performance - they'll be created lazily when visible
             // this.createDuckElement(duck, i);
@@ -2168,20 +2472,26 @@ class Game {
     }
 
     handleDisplayRaceFinished(data) {
-        const { winner, finishTime, rankings, raceMode, winners, winnerCount } = data;
+        const { winner, finishTime, rankings, raceMode, winnerCount, winners } = data;
         
         console.log('Control: Processing race finish from display');
         console.log('Winner:', winner.name, 'Time:', finishTime, 'Mode:', raceMode);
+        if (winners) {
+            console.log('Control: Received', winners.length, 'winners from display');
+        }
         
         // Update local state from display
         this.raceFinished = true;
         this.raceStarted = false;
         this.rankings = rankings;
-        if (winners && winners.length > 0) {
-            this.winners = winners;
-        }
         if (winnerCount) {
             this.winnerCount = winnerCount;
+        }
+        
+        // For Top N mode: Set currentRaceWinners from display data
+        if (raceMode === 'topN' && winners && winners.length > 0) {
+            this.currentRaceWinners = winners;
+            console.log('Control: Set currentRaceWinners from display:', this.currentRaceWinners.length, 'winners');
         }
         
         // Play sounds on control panel
@@ -2195,8 +2505,20 @@ class Game {
                 data: { winner }
             });
             
-            // Only send SHOW_WINNER for normal mode
-            if (raceMode !== 'topN') {
+            // Send different messages for normal vs Top N mode
+            if (raceMode === 'topN') {
+                // Top N mode: Send winner list to display
+                setTimeout(() => {
+                    this.displayChannel.postMessage({
+                        type: 'SHOW_TOPN_WINNER',
+                        data: { 
+                            winners: this.currentRaceWinners,
+                            finishTime: parseFloat(finishTime)
+                        }
+                    });
+                }, 3000); // 3 second delay to see racers finish clearly
+            } else {
+                // Normal mode: Send single winner
                 setTimeout(() => {
                     this.displayChannel.postMessage({
                         type: 'SHOW_WINNER',
@@ -2219,13 +2541,65 @@ class Game {
         }
         safeElementAction('pauseBtn', el => el.disabled = true);
         
-        // Show victory popup or winners panel based on mode
-        winner._controlFinishTime = parseFloat(finishTime);
+        // Save winners to accumulated list and update UI
         if (raceMode === 'topN') {
-            // Top N mode: Show winners panel only, no victory popup
-            this.showWinnersPanel();
+            // Top N mode: Merge current race winners into historical winners
+            if (this.currentRaceWinners && this.currentRaceWinners.length > 0) {
+                const startPosition = this.winners.length; // Continue numbering from last position
+                
+                this.currentRaceWinners.forEach((w, index) => {
+                    w._controlFinishTime = parseFloat(finishTime);
+                    w.position = startPosition + index + 1; // Continue position numbering
+                    w.raceNumber = this.currentRaceNumber;
+                    
+                    // Add to accumulated winners
+                    this.winners.push(w);
+                });
+                
+                console.log(`Control: Top N mode - Added ${this.currentRaceWinners.length} new winners. Total winners: ${this.winners.length}`);
+                
+                // Remove winners from activeDuckNames for next race
+                const winnerNames = this.currentRaceWinners.map(w => w.name);
+                this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                
+                // Save accumulated winners to localStorage
+                this.saveWinners();
+                this.updateHistoryWin();
+                
+                // Show Top N victory popup after delay
+                setTimeout(() => {
+                    this.showTopNVictoryPopup();
+                }, 3000); // 3 second delay to see racers finish clearly
+            }
         } else {
-            // Normal mode: Show victory popup after 3s delay
+            // Normal mode: Save single winner
+            const startPosition = this.winners.length;
+            winner._controlFinishTime = parseFloat(finishTime);
+            winner.position = startPosition + 1;
+            winner.raceNumber = this.currentRaceNumber;
+            
+            // Add winner to accumulated winners
+            this.winners.push({
+                position: winner.position,
+                id: winner.id,
+                name: winner.name,
+                code: winner.code, // Include employee code
+                iconSrc: winner.iconSrc,
+                finishTime: winner.finishTime,
+                _controlFinishTime: winner._controlFinishTime,
+                raceNumber: winner.raceNumber
+            });
+            
+            console.log(`Control: Normal mode - Added 1 winner. Total winners: ${this.winners.length}`);
+            
+            // Remove winner from activeDuckNames for next race
+            this.activeDuckNames = this.activeDuckNames.filter(name => name !== winner.name);
+            
+            // Save accumulated winners to localStorage
+            this.saveWinners();
+            this.updateHistoryWin();
+            
+            // Show victory popup after delay
             setTimeout(() => {
                 this.showVictoryPopup(winner);
             }, 3000); // 3 second delay to see racer finish clearly
@@ -2242,10 +2616,10 @@ class Game {
         this.raceHistory.push({
             raceNumber: this.currentRaceNumber,
             mode: raceMode || 'normal',
-            winners: raceMode === 'topN' && winners && winners.length > 0 
-                ? winners.map(w => ({ id: w.id, name: w.name }))
+            winners: raceMode === 'topN' && this.currentRaceWinners && this.currentRaceWinners.length > 0 
+                ? this.currentRaceWinners.map(w => ({ id: w.id, name: w.name }))
                 : [{ id: winner.id, name: winner.name }],
-            winnerCount: winners ? winners.length : 1,
+            winnerCount: this.currentRaceWinners ? this.currentRaceWinners.length : 1,
             duckCount: this.duckCount,
             duration: this.raceDuration,
             timestamp: new Date().toLocaleString('vi-VN')
@@ -2407,48 +2781,69 @@ class Game {
         let hasFinisher = false; // Track if any duck finished (for normal mode)
         
         this.ducks.forEach(duck => {
+            // For Top N mode: Check against currentRaceWinners (not accumulated winners)
+            // For Normal mode: Check against winners array
+            const winnersList = this.raceMode === 'topN' ? (this.currentRaceWinners || []) : this.winners;
+            
             // Check if duck just finished (not already in winners list)
             if (duck.position >= this.trackLength - FINISH_LINE_OFFSET && 
-                !this.winners.find(w => w.id === duck.id)) {
+                !winnersList.find(w => w.id === duck.id)) {
                 
-                // Only add to winners array in Top N mode
-                // In normal mode, winners array stays empty
-                if (this.raceMode === 'topN') {
-                    this.winners.push({
-                        id: duck.id,
-                        name: duck.name,
-                        iconSrc: duck.iconSrc,
-                        finishTime: duck.finishTime,
-                        position: duck.position
-                    });
-                    
-                    console.log(`🏆 Winner #${this.winners.length}:`, duck.name, 'Time:', duck.finishTime);
-                    
-                    // Show toast notification
-                    this.showToastNotification(duck, this.winners.length);
-                    
-                    // Send winner update to display
-                    if (this.displayChannel && !this.isDisplayMode) {
-                        this.displayChannel.postMessage({
-                            type: 'WINNER_FINISHED',
-                            data: {
-                                winner: this.winners[this.winners.length - 1],
-                                position: this.winners.length,
-                                totalWinners: this.winnerCount
-                            }
-                        });
+                // Only control mode should track winners - display mode just counts finishers
+                if (this.isDisplayMode) {
+                    // Display mode: For Top N, just log; race end is detected by counting all finished ducks below
+                    if (this.raceMode === 'topN') {
+                        console.log(`🏁 Display: Duck finished:`, duck.name);
+                    } else {
+                        hasFinisher = true;
                     }
                 } else {
-                    // Normal mode: just mark that someone finished (don't add to winners array)
-                    hasFinisher = true;
-                    console.log(`🏁 First finisher: ${duck.name}, Time: ${duck.finishTime}`);
+                    // Control mode: Track winners
+                    if (this.raceMode === 'topN') {
+                        if (!this.currentRaceWinners) this.currentRaceWinners = [];
+                        
+                        this.currentRaceWinners.push({
+                            id: duck.id,
+                            name: duck.name,
+                            code: duck.code, // Include employee code
+                            iconSrc: duck.iconSrc,
+                            finishTime: duck.finishTime,
+                            position: duck.position
+                        });
+                        
+                        console.log(`🏆 Winner #${this.currentRaceWinners.length}:`, duck.name, 'Time:', duck.finishTime);
+                        
+                        // Top N mode: No toast notification, just log
+                        
+                        // Send winner update to display
+                        if (this.displayChannel && !this.isDisplayMode) {
+                            this.displayChannel.postMessage({
+                                type: 'WINNER_FINISHED',
+                                data: {
+                                    winner: this.currentRaceWinners[this.currentRaceWinners.length - 1],
+                                    position: this.currentRaceWinners.length,
+                                    totalWinners: this.winnerCount
+                                }
+                            });
+                        }
+                    } else {
+                        // Normal mode: just mark that someone finished (don't add to winners array)
+                        hasFinisher = true;
+                        console.log(`🏁 First finisher: ${duck.name}, Time: ${duck.finishTime}`);
+                    }
                 }
             }
         });
         
+        // For display mode Top N: Count total ducks that have crossed the finish line
+        let finisherCount = 0;
+        if (this.isDisplayMode && this.raceMode === 'topN') {
+            finisherCount = this.ducks.filter(duck => duck.position >= this.trackLength - FINISH_LINE_OFFSET).length;
+        }
+        
         // Check if race should end based on mode
         const shouldEndRace = this.raceMode === 'topN' 
-            ? this.winners.length >= this.winnerCount 
+            ? (this.isDisplayMode ? finisherCount >= this.winnerCount : (this.currentRaceWinners && this.currentRaceWinners.length >= this.winnerCount))
             : hasFinisher; // Normal mode: end when first duck finishes
         
         if (shouldEndRace) {
@@ -2508,10 +2903,6 @@ class Game {
                 console.log(`[${elapsed.toFixed(1)}s] Leader: ${leader.name} | Pos: ${leader.position.toFixed(0)}/${this.trackLength} (${(leader.position/this.trackLength*100).toFixed(1)}%) | Speed: ${effectiveSpeed.toFixed(2)} px/frame | ETA: ${estimatedTimeToFinish.toFixed(1)}s | Delta: ${this.deltaTime.toFixed(3)}`);
             }
             
-            let targetCameraOffset;
-            let cameraMaxOffset;
-            let cameraSpeed;
-            
             // Calculate average speed of top 10 ducks for background sync
             const topDucks = this.rankings.slice(0, Math.min(10, this.rankings.length));
             const avgSpeed = topDucks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / topDucks.length;
@@ -2521,27 +2912,69 @@ class Game {
             let backgroundSpeed = avgSpeed * 2.5; // Multiply for visual effect
             let duckVisualSpeed = 0; // Visual speed for duck animation when background stops
             
-            // Simple finish line reveal logic:
-            // Show finish line when leader is 1 viewport width away from finish
-            // This way, finish line appears on the right edge of screen naturally
-            // As leader moves forward, camera follows and finish line moves left naturally
+            // Declare camera variables with default values
+            let targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
+            let cameraMaxOffset = this.trackLength - this.viewportWidth;
+            let cameraSpeed = 0.15;
+            
+            // Finish line reveal and animation logic:
+            // Reveal finish line when leader is 2.5 viewport widths away (increased from 1.5)
+            // This ensures finish line appears earlier and has time to slide from right to left
             const finishLine = document.getElementById('finishLine');
             
-            if (distanceToFinish <= this.viewportWidth) {
-                // Reveal finish line when it enters viewport range
+            if (distanceToFinish <= this.viewportWidth * 2.5) {
+                // Reveal finish line early
                 if (finishLine && finishLine.classList.contains('hidden')) {
                     finishLine.classList.remove('hidden');
-                    console.log(`[Finish Line] Revealed at distance: ${distanceToFinish.toFixed(0)}px (viewport: ${this.viewportWidth}px)`);
-                }
-                
-                // Update finish line position
-                if (finishLine) {
-                    finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
+                    this.finishLinePreviewStartTime = Date.now();
+                    console.log(`[Finish Line] 🏁 REVEALED at distance: ${distanceToFinish.toFixed(0)}px | Viewport: ${this.viewportWidth}px | Leader pos: ${leader.position.toFixed(0)}px | Track length: ${this.trackLength}px`);
                 }
             }
             
+            // Always update finish line position when visible (relative to camera)
+            if (finishLine && !finishLine.classList.contains('hidden')) {
+                finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
+            }
+            
+            // Preview animation: Pan to finish line, then return to leader
+            const timeSinceReveal = this.finishLinePreviewStartTime > 0 ? (Date.now() - this.finishLinePreviewStartTime) / 1000 : 999;
+            const previewDuration = 3.0; // 3.0 seconds preview (increased from 1.5s for better visibility)
+            const returnDuration = 1.5; // 1.5 seconds to return (increased from 1.0s)
+            
             // Camera and background logic based on distance to finish
-            if (distanceToFinish <= this.viewportWidth * 1.5) {
+            if (distanceToFinish <= this.viewportWidth * 2.5 && distanceToFinish > this.viewportWidth * 1.5) {
+                // PHASE 0: Preview phase - show finish line then return to leader
+                
+                if (timeSinceReveal < previewDuration) {
+                    // Pan camera to show finish line on screen (reveal phase)
+                    const previewProgress = Math.min(1, timeSinceReveal / previewDuration);
+                    const panToFinish = this.viewportWidth * 0.7 * previewProgress; // Pan 70% viewport forward
+                    
+                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panToFinish;
+                    cameraMaxOffset = this.trackLength - this.viewportWidth;
+                    cameraSpeed = 0.1;
+                    
+                    console.log(`[Preview] Panning to finish line... ${(previewProgress * 100).toFixed(0)}%`);
+                } else if (timeSinceReveal < previewDuration + returnDuration) {
+                    // Return camera to leader
+                    const returnProgress = (timeSinceReveal - previewDuration) / returnDuration;
+                    const panToFinish = this.viewportWidth * 0.7 * (1 - returnProgress); // Pan back
+                    
+                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panToFinish;
+                    cameraMaxOffset = this.trackLength - this.viewportWidth;
+                    cameraSpeed = 0.1;
+                    
+                    if (!this.finishLinePreviewShown) {
+                        console.log(`[Preview] Returning to leader...`);
+                        this.finishLinePreviewShown = true;
+                    }
+                } else {
+                    // Preview done, normal follow
+                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
+                    cameraMaxOffset = this.trackLength - this.viewportWidth;
+                    cameraSpeed = 0.15;
+                }
+            } else if (distanceToFinish <= this.viewportWidth * 1.5) {
                 // When leader is within 1.5 viewport widths from finish
                 // Start positioning leader on right edge and gradually move to center
                 
@@ -2566,7 +2999,7 @@ class Game {
                     
                     targetCameraOffset = leader.position - (this.viewportWidth * leaderScreenPosition);
                     cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.12; // Smooth transition
+                    cameraSpeed = 0.015; // Very slow constant speed (reduced from 0.03)
                 }
             } else {
                 // Normal camera follow (leader at 60% from left)
@@ -2576,9 +3009,17 @@ class Game {
             }
             
             // Smooth camera target with lerp to prevent snapping when leader changes
-            // This smooths out sudden jumps when a new duck takes the lead
-            const targetSmoothSpeed = 0.08; // Lower = smoother transitions
-            this.smoothCameraTarget += (targetCameraOffset - this.smoothCameraTarget) * targetSmoothSpeed;
+            // Skip smoothing during finish line reveal to maintain constant speed
+            const isFinishLineReveal = distanceToFinish <= this.viewportWidth * 1.5 && distanceToFinish > this.viewportWidth * 0.5;
+            
+            if (isFinishLineReveal) {
+                // Direct camera movement for constant speed (no double lerp)
+                this.smoothCameraTarget = targetCameraOffset;
+            } else {
+                // Normal smoothing for leader changes
+                const targetSmoothSpeed = 0.08;
+                this.smoothCameraTarget += (targetCameraOffset - this.smoothCameraTarget) * targetSmoothSpeed;
+            }
             
             // Apply smoothed target with additional lerp for final camera position
             this.cameraOffset += (this.smoothCameraTarget - this.cameraOffset) * cameraSpeed;
@@ -2776,17 +3217,29 @@ class Game {
     updateHistoryWin() {
         // Cập nhật danh sách lịch sử chiến thắng
         const list = document.getElementById('historyWinList');
-        if (!list || this.winners.length === 0) return;
+        
+        console.log('updateHistoryWin called - Winners:', this.winners.length, 'List element:', list ? 'found' : 'not found');
+        
+        if (!list) {
+            console.warn('historyWinList element not found');
+            return;
+        }
+        
+        if (this.winners.length === 0) {
+            list.innerHTML = '<p style="color: #888; padding: 10px;">No winners yet. Start racing!</p>';
+            return;
+        }
         
         let html = '<ol>';
         this.winners.forEach((winner, index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
-            const colorDot = `<span style="display:inline-block;width:12px;height:12px;background:${winner.color};border-radius:50%;margin-right:5px;"></span>`;
+            const colorDot = winner.color ? `<span style="display:inline-block;width:12px;height:12px;background:${winner.color};border-radius:50%;margin-right:5px;"></span>` : '';
             html += `<li>${medal}${colorDot}${winner.name}</li>`;
         });
         html += '</ol>';
         
         list.innerHTML = html;
+        console.log('History Win updated with', this.winners.length, 'winners');
     }
 
     endRace() {
@@ -2804,32 +3257,47 @@ class Game {
         
         // Display mode: Send winner info back to control then stop
         if (this.isDisplayMode) {
-            // Only send message in normal mode, skip in Top N mode
-            if (this.raceMode !== 'topN') {
-                console.log('Display: Race ended, sending winner to control');
-                
-                // Calculate rankings and winner
-                this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
-                const winner = this.rankings[0];
-                
-                // Calculate finish time - use real time
-                const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
-                
-                // Send winner info to control panel
-                if (this.displayChannel) {
-                    this.displayChannel.postMessage({
-                        type: 'DISPLAY_RACE_FINISHED',
-                        data: { 
-                            winner,
-                            finishTime: parseFloat(finishTime),
-                            rankings: this.rankings,
-                            raceMode: this.raceMode,
-                            winners: this.winners,
-                            winnerCount: this.winnerCount
-                        }
-                    });
-                    console.log('Display: Sent DISPLAY_RACE_FINISHED with winner:', winner.name, 'Mode:', this.raceMode);
-                }
+            console.log('Display: Race ended, Mode:', this.raceMode);
+            
+            // Calculate rankings
+            this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
+            const winner = this.rankings[0];
+            
+            // Calculate finish time - use real time
+            const finishTime = ((Date.now() - this.startTime) / 1000).toFixed(2);
+            
+            // For Top N mode: Get top N finishers from rankings
+            let topNWinners = null;
+            if (this.raceMode === 'topN') {
+                // Get top N ducks that finished (crossed finish line)
+                const finishedDucks = this.rankings.filter(duck => 
+                    duck.position >= this.trackLength - FINISH_LINE_OFFSET
+                );
+                topNWinners = finishedDucks.slice(0, this.winnerCount).map(duck => ({
+                    id: duck.id,
+                    name: duck.name,
+                    code: duck.code, // Include employee code
+                    iconSrc: duck.iconSrc,
+                    finishTime: duck.finishTime,
+                    position: duck.position
+                }));
+                console.log('Display: Calculated Top N winners:', topNWinners.length, 'winners');
+            }
+            
+            // Send race finished message to control panel
+            if (this.displayChannel) {
+                this.displayChannel.postMessage({
+                    type: 'DISPLAY_RACE_FINISHED',
+                    data: { 
+                        winner,
+                        finishTime: parseFloat(finishTime),
+                        rankings: this.rankings,
+                        raceMode: this.raceMode,
+                        winnerCount: this.winnerCount,
+                        winners: topNWinners // Send top N winners for Top N mode
+                    }
+                });
+                console.log('Display: Sent DISPLAY_RACE_FINISHED - Mode:', this.raceMode, 'Winners:', topNWinners?.length || 1);
             }
             
             return; // Display doesn't show victory popup locally
@@ -2879,33 +3347,63 @@ class Game {
         
         // Save winners to history and exclude them from next race
         if (this.raceMode === 'topN') {
-            // Top N mode: Save all winners to persistent history
-            const currentWinnerCount = this.winners.length;
-            this.winners.forEach((w, index) => {
-                w._controlFinishTime = parseFloat(finishTime);
-                // Add position info for persistent storage
-                if (!w.position) {
-                    w.position = currentWinnerCount + index + 1;
-                }
-                if (!w.raceNumber) {
+            // Top N mode: Merge current race winners into historical winners
+            if (this.currentRaceWinners && this.currentRaceWinners.length > 0) {
+                const startPosition = this.winners.length; // Continue numbering from last position
+                
+                this.currentRaceWinners.forEach((w, index) => {
+                    w._controlFinishTime = parseFloat(finishTime);
+                    w.position = startPosition + index + 1; // Continue position numbering
                     w.raceNumber = this.currentRaceNumber;
-                }
+                    
+                    // Add to accumulated winners
+                    this.winners.push(w);
+                });
+                
+                console.log(`Top N mode: Added ${this.currentRaceWinners.length} new winners. Total winners: ${this.winners.length}`);
+                
+                // Remove winners from activeDuckNames for next race
+                const winnerNames = this.currentRaceWinners.map(w => w.name);
+                this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+                
+                // Save accumulated winners to localStorage
+                this.saveWinners();
+                this.updateHistoryWin();
+                
+                // Show Top N victory popup after delay (like normal mode)
+                setTimeout(() => {
+                    this.showTopNVictoryPopup();
+                }, 3000); // 3 second delay to see racers finish clearly
+            }
+        } else {
+            // Normal mode: Save single winner immediately and show popup
+            const startPosition = this.winners.length;
+            winner._controlFinishTime = parseFloat(finishTime);
+            winner.position = startPosition + 1;
+            winner.raceNumber = this.currentRaceNumber;
+            
+            // Add winner to accumulated winners
+            this.winners.push({
+                position: winner.position,
+                id: winner.id,
+                name: winner.name,
+                code: winner.code, // Include employee code
+                iconSrc: winner.iconSrc,
+                finishTime: winner.finishTime,
+                _controlFinishTime: winner._controlFinishTime,
+                raceNumber: winner.raceNumber
             });
             
-            // Remove winners from activeDuckNames for next race
-            const winnerNames = this.winners.map(w => w.name);
-            this.activeDuckNames = this.activeDuckNames.filter(name => !winnerNames.includes(name));
+            console.log(`Normal mode: Added 1 winner. Total winners: ${this.winners.length}`);
             
-            // Save winners to localStorage
+            // Remove winner from activeDuckNames for next race
+            this.activeDuckNames = this.activeDuckNames.filter(name => name !== winner.name);
+            
+            // Save accumulated winners to localStorage
             this.saveWinners();
             this.updateHistoryWin();
             
-            // Show winners panel
-            this.showWinnersPanel();
-        } else {
-            // Normal mode: Show victory popup for single winner after delay
-            // Winner will be saved when user clicks Continue
-            winner._controlFinishTime = parseFloat(finishTime);
+            // Show victory popup after delay
             setTimeout(() => {
                 this.showVictoryPopup(winner);
             }, 3000); // 3 second delay to see racer finish clearly
@@ -3003,8 +3501,8 @@ class Game {
             winnerIconEl.innerHTML = `<div style="width:200px;height:200px;border-radius:50%;background:${winner.color};margin:0 auto;"></div>`;
         }
         
-        // Set winner name
-        winnerNameEl.textContent = winner.name;
+        // Set winner name with code
+        winnerNameEl.textContent = this.getDisplayName(winner);
         
         // Calculate finish time - prioritize synchronized time from control/display
         let finishTime;
@@ -3062,25 +3560,74 @@ class Game {
         }, 300);
     }
 
-    continueRace() {
-        // Lưu vịt thắng vào danh sách winners
-        if (this.rankings.length > 0) {
-            const winner = this.rankings[0];
-            this.winners.push({
-                position: this.winners.length + 1,
-                id: winner.id,
-                name: winner.name,
-                color: winner.color,
-                raceNumber: this.currentRaceNumber
-            });
-            
-            // Xóa vịt thắng khỏi activeDuckNames
-            this.activeDuckNames = this.activeDuckNames.filter(name => name !== winner.name);
-            
-            // Lưu và cập nhật UI lịch sử chiến thắng
-            this.saveWinners();
-            this.updateHistoryWin();
+    showTopNVictoryPopup() {
+        // Show only current race winners, not accumulated winners
+        const winnersToShow = this.currentRaceWinners || [];
+        console.log('Showing Top N victory popup with', winnersToShow.length, 'winners from current race');
+        
+        const popup = document.getElementById('topNVictoryPopup');
+        const topNCountEl = document.getElementById('topNCount');
+        const topNWinnersGridEl = document.getElementById('topNWinnersGrid');
+        
+        if (!popup || !topNWinnersGridEl) {
+            console.error('Top N victory popup elements not found!');
+            return;
         }
+        
+        // Update winner count
+        if (topNCountEl) {
+            topNCountEl.textContent = winnersToShow.length;
+        }
+        
+        // Build winners grid - show only current race winners
+        let winnersHTML = '';
+        winnersToShow.forEach((winner, index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+            const prizeName = this.getPrizeName(winner.position || (index + 1));
+            
+            // Create winner icon
+            let iconHTML = '';
+            if (this.imagesLoaded && this.duckImages.length > 0) {
+                const iconIndex = (winner.id - 1) % this.duckImages.length;
+                if (this.duckImages[iconIndex] && this.duckImages[iconIndex][0]) {
+                    iconHTML = `<img src="${this.duckImages[iconIndex][0].src}" alt="${winner.name}">`;
+                }
+            }
+            
+            winnersHTML += `
+                <div class="topn-winner-card">
+                    <div class="topn-winner-medal">${medal}</div>
+                    <div class="topn-winner-icon">${iconHTML}</div>
+                    <div class="topn-winner-position">${prizeName}</div>
+                    <div class="topn-winner-name">${this.getDisplayName(winner)}</div>
+                </div>
+            `;
+        });
+        
+        topNWinnersGridEl.innerHTML = winnersHTML;
+        
+        // Show popup with animation
+        popup.style.display = 'flex';
+        popup.classList.remove('hidden');
+        setTimeout(() => {
+            popup.classList.add('show');
+        }, 10);
+    }
+
+    closeTopNVictoryPopup() {
+        const popup = document.getElementById('topNVictoryPopup');
+        if (!popup) return;
+        
+        popup.classList.remove('show');
+        setTimeout(() => {
+            popup.classList.add('hidden');
+            popup.style.display = 'none';
+        }, 300);
+    }
+
+    continueRace() {
+        // Winner already saved in endRace() - just close popup and prepare for next race
+        console.log('Continue Race - Winner already saved. Total winners:', this.winners.length);
         
         // Đóng victory popup
         this.closeVictoryPopup();
@@ -3190,6 +3737,80 @@ class Game {
         this.reset();
     }
 
+    showTopNResultPanel() {
+        console.log('Showing Top N Result Panel with', this.winners.length, 'winners');
+        
+        const resultPanel = document.getElementById('resultPanel');
+        resultPanel.classList.remove('hidden');
+        
+        // Send results to display
+        if (this.displayChannel && !this.isDisplayMode) {
+            this.displayChannel.postMessage({
+                type: 'SHOW_RESULTS',
+                data: {
+                    winners: this.winners,
+                    totalRaces: this.stats.totalRaces
+                }
+            });
+        }
+        
+        const prizeTitle = this.getPrizeTitle();
+        document.getElementById('resultTitle').innerHTML = `🏆 ${prizeTitle} - Top ${this.winners.length}`;
+        
+        // Get saved layout settings
+        const winnersGridWidth = localStorage.getItem('winnersGridWidth') || '95';
+        const cardGap = localStorage.getItem('cardGap') || '1.5';
+        
+        let html = '<div class="winners-list">';
+        
+        if (this.winners.length > 0) {
+            html += `<div class="winners-grid" style="width: ${winnersGridWidth}%; gap: ${cardGap}%;">`;
+            this.winners.forEach((winner, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `🏅`;
+                const position = index + 1;
+                const prizeName = this.getPrizeName(position);
+                
+                // Create duck icon
+                let iconHTML = '';
+                if (this.imagesLoaded && this.duckImages.length > 0) {
+                    const iconIndex = (winner.id - 1) % this.duckImages.length;
+                    if (this.duckImages[iconIndex] && this.duckImages[iconIndex][0]) {
+                        iconHTML = `<img src="${this.duckImages[iconIndex][0].src}" alt="${winner.name}" style="width: 60px; height: 60px; object-fit: contain;">`; 
+                    }
+                }
+                
+                html += `
+                    <div class="winner-card">
+                        <div class="winner-medal">${medal}</div>
+                        <div class="winner-icon-display">${iconHTML}</div>
+                        <div class="winner-position">${prizeName}</div>
+                        <div class="winner-duck-name">${this.getDisplayName(winner)}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        } else {
+            html += '<p>No winners yet!</p>';
+        }
+        
+        html += '</div>';
+        html += '<div class="result-actions" id="resultActions">';
+        html += '<button class="btn btn-primary" onclick="game.fullReset()">🔄 Play Again</button>';
+        html += '<button class="btn btn-secondary" onclick="game.viewHistory()">📜 View History</button>';
+        html += '<button class="btn btn-secondary" onclick="game.toggleFullscreenResult()">🔍 View Fullscreen</button>';
+        html += '</div>';
+        
+        document.getElementById('resultMessage').innerHTML = html;
+        
+        // Auto scroll to result panel
+        setTimeout(() => {
+            resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        
+        // Play celebration sound
+        this.soundManager.playCrowdCheer();
+    }
+
     showWinnersPanel() {
         const resultPanel = document.getElementById('resultPanel');
         resultPanel.classList.remove('hidden');
@@ -3213,7 +3834,7 @@ class Game {
                     <div class="winner-card">
                         <div class="winner-medal">${medal}</div>
                         <div class="winner-position">${prizeName}</div>
-                        <div class="winner-duck-name">${winner.name}</div>
+                        <div class="winner-duck-name">${this.getDisplayName(winner)}</div>
                     </div>
                 `;
             });
@@ -3279,7 +3900,18 @@ class Game {
         this.winners = [];
         this.excludedDucks = [];
         this.activeDuckNames = [...this.duckNames]; // Reset về danh sách ban đầu
+        this.activeDuckCodes = [...this.duckCodes]; // Reset codes as well
         this.saveWinners();
+        
+        // Clear localStorage data (only on full reset, not on F5)
+        localStorage.removeItem('duckNames');
+        localStorage.removeItem('duckCodes');
+        localStorage.removeItem('excelFileName');
+        localStorage.removeItem('customPrizeNames');
+        localStorage.removeItem('prizeNamesSortOrder');
+        
+        console.log('✓ Full reset completed - all data cleared');
+        
         this.reset();
     }
 

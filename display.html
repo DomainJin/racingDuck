@@ -6,13 +6,71 @@
     <title>Racing Display - Full Screen</title>
     <link rel="stylesheet" href="style.css?v=43">
     <style>
-        /* Full screen display mode */
+        /* Custom butterfly cursor */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             background: #000;
+            cursor: none;
         }
+
+        /* Butterfly cursor follower */
+        .butterfly-cursor {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 99999;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            line-height: 1;
+            text-align: center;
+            animation: butterflyFlap 0.6s ease-in-out infinite;
+            transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
+        }
+
+        @keyframes butterflyFlap {
+            0%, 100% {
+                transform: translate(-50%, -50%) rotateZ(-5deg) scale(1);
+            }
+            50% {
+                transform: translate(-50%, -50%) rotateZ(5deg) scale(1.1);
+            }
+        }
+
+        /* Cursor trail effect */
+        .butterfly-trail {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 99998;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.3s ease-out;
+        }
+
+        .butterfly-trail::before {
+            content: '✨';
+            position: absolute;
+            font-size: 16px;
+            animation: trailFade 1s ease-out forwards;
+        }
+
+        @keyframes trailFade {
+            0% {
+                opacity: 0.8;
+                transform: scale(1) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.3) rotate(180deg);
+            }
+        }
+        
+        /* Full screen display mode */
         
         .display-container {
             width: 100vw;
@@ -99,8 +157,9 @@
         
         .result-panel.fullscreen .winner-card {
             flex: 1 1 0 !important;
-            min-width: 100px !important;
-            max-width: 160px !important;
+            min-width: 160px !important;
+            max-width: 200px !important;
+            width: 100% !important;
             padding: 2% !important;
             border-radius: 8px !important;
             box-sizing: border-box !important;
@@ -108,27 +167,37 @@
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            aspect-ratio: 1 / 1.2 !important;
+            aspect-ratio: 1 / 1.4 !important;
         }
         
         .result-panel.fullscreen .winner-medal {
-            font-size: 3em !important;
-            margin: 0 0 0.3em 0 !important;
+            font-size: 2.5em !important;
+            margin: 0 0 0.2em 0 !important;
             line-height: 1 !important;
+            flex-shrink: 0 !important;
         }
         
         .result-panel.fullscreen .winner-position {
-            font-size: 1em !important;
-            margin: 0 0 0.3em 0 !important;
-            white-space: nowrap !important;
+            font-size: 0.75em !important;
+            margin: 0 0 0.2em 0 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            text-align: center !important;
+            line-height: 1.3 !important;
+            width: 100% !important;
+            overflow: visible !important;
+            padding: 0 5% !important;
         }
         
         .result-panel.fullscreen .winner-duck-name {
-            font-size: 1.2em !important;
-            margin: 0.3em 0 !important;
+            font-size: 0.9em !important;
+            margin: 0.2em 0 !important;
             word-break: break-word !important;
             text-align: center !important;
-            line-height: 1.2 !important;
+            line-height: 1.3 !important;
+            width: 100% !important;
+            overflow: visible !important;
+            padding: 0 5% !important;
         }
         
         .result-panel.fullscreen .result-actions {
@@ -305,7 +374,7 @@
             margin-bottom: 3% !important;
             border-radius: 50% !important;
             width: auto !important;
-            height: 70% !important;
+            height: 90% !important;
             aspect-ratio: 1 / 1 !important;
             flex-shrink: 0 !important;
             display: flex !important;
@@ -354,9 +423,138 @@
             font-size: clamp(0.8em, 2vw, 1.1em) !important;
             padding: 2% 5% !important;
         }
+
+        /* Top N Victory Popup - Display Mode Styles */
+        .victory-content-topn {
+            width: 95% !important;
+            height: 90% !important;
+            aspect-ratio: auto !important;
+            border-radius: 20px !important;
+            padding: 1.5% !important;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4),
+                        inset 0 0 50px rgba(0, 0, 0, 0.3),
+                        0 0 50px rgba(102, 126, 234, 0.3) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .victory-content-topn .victory-header {
+            flex-shrink: 0 !important;
+            margin-bottom: 0.5% !important;
+        }
+
+        .victory-content-topn .victory-header h1 {
+            font-size: clamp(1.2em, 2vw, 1.8em) !important;
+            margin: 0 !important;
+        }
+
+        .victory-body-topn {
+            background: transparent !important;
+            padding: 0.5% !important;
+            margin: 0 !important;
+            width: 100% !important;
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+            align-items: center !important;
+            align-content: center !important;
+            gap: 1% !important;
+            overflow: hidden !important;
+        }
+
+        .topn-winner-card {
+            background: rgba(255, 255, 255, 0.95) !important;
+            border-radius: 12px !important;
+            padding: 1% !important;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 0.3em !important;
+            flex: 0 1 auto !important;
+            min-width: 100px !important;
+            max-width: 150px !important;
+            width: auto !important;
+            height: auto !important;
+        }
+
+        .topn-winner-card:hover {
+            transform: translateY(-5px) scale(1.05) !important;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5) !important;
+        }
+
+        .topn-winner-medal {
+            font-size: clamp(1.5em, 3vw, 2.5em) !important;
+            margin: 0.1em 0 !important;
+            line-height: 1 !important;
+            animation: winnerSpin 2s ease-in-out infinite !important;
+            flex-shrink: 0 !important;
+        }
+
+        .topn-winner-icon {
+            width: clamp(40px, 5vw, 60px) !important;
+            height: clamp(40px, 5vw, 60px) !important;
+            margin: 0.2em 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+        }
+
+        .topn-winner-icon img {
+            max-width: 100% !important;
+            max-height: 100% !important;
+            object-fit: contain !important;
+            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3)) !important;
+        }
+
+        .topn-winner-position {
+            font-size: clamp(0.75em, 1.1vw, 0.95em) !important;
+            font-weight: bold !important;
+            color: #667eea !important;
+            margin: 0.2em 0 !important;
+            text-align: center !important;
+            white-space: normal !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            line-height: 1.2 !important;
+        }
+
+        .topn-winner-name {
+            font-size: clamp(0.7em, 1vw, 0.85em) !important;
+            font-weight: 600 !important;
+            color: #333 !important;
+            margin: 0.2em 0 !important;
+            text-align: center !important;
+            word-break: break-word !important;
+            line-height: 1.3 !important;
+            max-width: 100% !important;
+        }
+
+        /* Close button positioned below race-track */
+        .topn-close-btn {
+            position: fixed !important;
+            bottom: 3vh !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            font-size: clamp(1em, 2vw, 1.5em) !important;
+            padding: 1% 3% !important;
+            z-index: 10001 !important;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        .victory-content-topn .victory-footer {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
+    <!-- Butterfly cursor element -->
+    <div class="butterfly-cursor" id="butterflyCursor">🦋</div>
+    
     <div class="display-container">
         <!-- Loading Message -->
         <div class="loading-display" id="loadingDisplay">
@@ -419,7 +617,23 @@
         </div>
     </div>
 
-    <script src="game.js?v=32"></script>
+    <!-- Top N Victory Popup -->
+    <div class="victory-popup hidden" id="topNVictoryPopup">
+        <div class="victory-overlay"></div>
+        <div class="victory-content victory-content-topn">
+            <div class="victory-header">
+                <h1>🏆 TOP <span id="topNCount">N</span> WINNERS! 🏆</h1>
+            </div>
+            <div class="victory-body victory-body-topn" id="topNWinnersGrid">
+                <!-- Winners will be populated here -->
+            </div>
+        </div>
+        <!-- Close button outside race-track area -->
+        <button class="btn btn-primary topn-close-btn" onclick="displayGame.closeTopNVictoryPopup()">✓ Close</button>
+        </div>
+    </div>
+
+    <script src="game.js?v=60"></script>
     <script>
         // Display mode - sync with main window via BroadcastChannel
         const displayChannel = new BroadcastChannel('race_display');
@@ -429,6 +643,9 @@
             console.log('=== DISPLAY WINDOW LOAD EVENT ===');
             console.log('Display mode initialized');
             console.log('BroadcastChannel created');
+            
+            // Initialize butterfly cursor
+            initButterflyCursor();
             
             try {
                 // Create game instance for display with isDisplayMode=true
@@ -559,6 +776,9 @@
                     case 'SHOW_WINNER':
                         handleShowWinner(data);
                         break;
+                    case 'SHOW_TOPN_WINNER':
+                        handleShowTopNWinner(data);
+                        break;
                     case 'CLOSE_VICTORY':
                         handleCloseVictory();
                         break;
@@ -650,9 +870,9 @@
         }
         
         function startRaceWithData(data) {
-            const { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNames, duckImages, startTime } = data;
+            const { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNames, duckCodes, duckImages, startTime } = data;
             
-            console.log('🎮 Display: startRaceWithData called with:', { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNamesCount: duckNames?.length });
+            console.log('🎮 Display: startRaceWithData called with:', { duckCount, raceDuration, raceMode, winnerCount, gameSpeed, theme, duckNamesCount: duckNames?.length, duckCodesCount: duckCodes?.length });
             
             // Verify displayGame exists
             if (!displayGame) {
@@ -715,6 +935,11 @@
             displayGame.currentTheme = theme;
             if (duckNames && duckNames.length > 0) {
                 displayGame.activeDuckNames = duckNames;
+                displayGame.duckNames = duckNames; // Also set duckNames for reference
+            }
+            if (duckCodes && duckCodes.length > 0) {
+                displayGame.activeDuckCodes = duckCodes;
+                displayGame.duckCodes = duckCodes; // Also set duckCodes for reference
             }
             
             console.log('Display: Setting up race - Mode:', displayGame.raceMode, 'WinnerCount:', displayGame.winnerCount, 'Speed:', displayGame.gameSpeed + 'x', 'Ducks:', duckCount);
@@ -779,10 +1004,24 @@
             }
         }
         
+        function handleShowTopNWinner(data) {
+            const { winners, finishTime } = data;
+            if (displayGame && winners) {
+                console.log('Display: Showing Top N victory popup with', winners.length, 'winners');
+                
+                // Set winners on displayGame
+                displayGame.currentRaceWinners = winners;
+                
+                // Show Top N popup
+                displayGame.showTopNVictoryPopup();
+            }
+        }
+        
         function handleCloseVictory() {
             console.log('Closing victory popup on display');
             if (displayGame) {
                 displayGame.closeVictoryPopup();
+                displayGame.closeTopNVictoryPopup();
             }
         }
         
@@ -1059,6 +1298,73 @@
                 console.log('✓ Loaded saved race track aspect ratio:', `${savedTrackWidth}:${savedTrackHeight}`);
             }
         });
+
+        // Butterfly cursor animation with smooth movement
+        function initButterflyCursor() {
+            const cursor = document.getElementById('butterflyCursor');
+            if (!cursor) return;
+
+            let mouseX = window.innerWidth / 2;
+            let mouseY = window.innerHeight / 2;
+            let cursorX = mouseX;
+            let cursorY = mouseY;
+            let lastTrailTime = 0;
+
+            // Track mouse position
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+
+                // Create trail effect every 100ms
+                const now = Date.now();
+                if (now - lastTrailTime > 100) {
+                    createTrail(mouseX, mouseY);
+                    lastTrailTime = now;
+                }
+            });
+
+            // Smooth cursor movement with easing (soft-start, soft-stop)
+            function animateCursor() {
+                // Easing factor (0.1 = slower, smoother; 0.5 = faster)
+                const easing = 0.15;
+                
+                // Calculate distance
+                const dx = mouseX - cursorX;
+                const dy = mouseY - cursorY;
+                
+                // Apply easing (soft-start, soft-stop effect)
+                cursorX += dx * easing;
+                cursorY += dy * easing;
+
+                // Update cursor position
+                cursor.style.left = cursorX + 'px';
+                cursor.style.top = cursorY + 'px';
+
+                // Add rotation based on movement direction
+                const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                cursor.style.transform = `translate(-50%, -50%) rotate(${angle + 90}deg)`;
+
+                requestAnimationFrame(animateCursor);
+            }
+
+            // Create sparkle trail
+            function createTrail(x, y) {
+                const trail = document.createElement('div');
+                trail.className = 'butterfly-trail';
+                trail.style.left = x + 'px';
+                trail.style.top = y + 'px';
+                document.body.appendChild(trail);
+
+                // Fade in
+                setTimeout(() => trail.style.opacity = '1', 10);
+
+                // Remove after animation
+                setTimeout(() => trail.remove(), 1000);
+            }
+
+            // Start animation
+            animateCursor();
+        }
     </script>
 </body>
 </html>

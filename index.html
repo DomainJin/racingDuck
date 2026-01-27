@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> The Lucky Racer </title>
-    <link rel="stylesheet" href="style.css?v=43">
+    <link rel="stylesheet" href="style.css?v=45">
 </head>
 <body>
     <!-- Remove tab navigation, keep single page -->
@@ -103,48 +103,16 @@
                     </div>
                     
                     <div style="margin-top: 15px; padding: 10px; background: rgba(240, 147, 251, 0.1); border-radius: 5px;">
-                        <h4 style="color: #f093fb; font-size: 16px; margin: 0 0 10px 0;">🏆 Customize Prize Names</h4>
-                        <div id="prizeNamesContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 1:</label>
-                                <input type="text" id="prizeName1" placeholder="Prize 1" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="color: #f093fb; font-size: 16px; margin: 0;">🏆 Customize Prize Names</h4>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="game.sortPrizeNames('asc')" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" title="Sort Prize 1, 2, 3...">↑ 1-N</button>
+                                <button onclick="game.sortPrizeNames('desc')" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" title="Sort Prize N, N-1... 3, 2, 1">↓ N-1</button>
+                                <button onclick="game.addPrizeNameField()" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">+ Add Prize</button>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 2:</label>
-                                <input type="text" id="prizeName2" placeholder="Prize 2" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 3:</label>
-                                <input type="text" id="prizeName3" placeholder="Prize 3" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 4:</label>
-                                <input type="text" id="prizeName4" placeholder="Prize 4" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 5:</label>
-                                <input type="text" id="prizeName5" placeholder="Prize 5" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 6:</label>
-                                <input type="text" id="prizeName6" placeholder="Prize 6" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 7:</label>
-                                <input type="text" id="prizeName7" placeholder="Prize 7" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 8:</label>
-                                <input type="text" id="prizeName8" placeholder="Prize 8" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 9:</label>
-                                <input type="text" id="prizeName9" placeholder="Prize 9" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="min-width: 60px; font-size: 14px; color: #fff;">Prize 10:</label>
-                                <input type="text" id="prizeName10" placeholder="Prize 10" maxlength="30" style="padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; flex: 1; font-size: 13px;">
-                            </div>
+                        </div>
+                        <div id="prizeNamesContainer" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+                            <!-- Prize name fields will be dynamically added here -->
                         </div>
                         <small style="color: #888; margin-top: 8px; display: block;">Leave blank to use default names (Prize 1, Prize 2, etc.)</small>
                     </div>
@@ -326,10 +294,28 @@
         </div>
     </div>
 
+    <!-- Top N Victory Popup -->
+    <div class="victory-popup hidden" id="topNVictoryPopup">
+        <div class="victory-overlay" onclick="game.closeTopNVictoryPopup()"></div>
+        <div class="victory-content victory-content-topn">
+            <div class="victory-header">
+                <h1>🏆 TOP <span id="topNCount">N</span> WINNERS! 🏆</h1>
+            </div>
+            <div class="victory-body victory-body-topn" id="topNWinnersGrid">
+                <!-- Winners will be populated here -->
+            </div>
+            <div class="victory-footer">
+                <button class="btn btn-primary" onclick="game.closeTopNVictoryPopup(); game.resetRace()">▶️ Next Race</button>
+                <button class="btn btn-secondary" onclick="game.closeTopNVictoryPopup(); game.fullReset()">🔄 Play Again</button>
+                <button class="btn btn-secondary" onclick="game.closeTopNVictoryPopup(); game.showTopNResultPanel()">📋 View Full Results</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SheetJS library for Excel file support -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     
-    <script src="game.js?v=32"></script>
+    <script src="game.js?v=60"></script>
     <script>
         // Debug: Check if game object exists
         window.addEventListener('load', function() {
@@ -337,6 +323,9 @@
             console.log('Game object exists:', typeof game !== 'undefined');
             if (typeof game !== 'undefined') {
                 console.log('Game initialized successfully');
+                // Load saved data from localStorage
+                game.loadSavedData();
+                game.loadPrizeNames();
                 // Load saved result panel settings
                 game.loadResultPanelSettings();
             } else {
