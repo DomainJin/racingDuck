@@ -547,6 +547,19 @@ class Game {
         this.viewportBuffer = 500; // Render ducks 500px outside viewport
         this.visibleDucks = new Set(); // Track which ducks are currently visible
         
+        // Canvas rendering for large races (performance boost)
+        this.useCanvasRendering = false; // Auto-enabled for 100+ ducks
+        this.canvas = null;
+        this.ctx = null;
+        this.canvasUpdateBatch = []; // Batch canvas updates
+        
+        // Web Workers for multi-threaded physics (large races)
+        this.useWorkers = false; // Auto-enabled for 1000+ ducks
+        this.workers = [];
+        this.workerCount = 4; // Number of worker threads
+        this.pendingWorkerUpdates = 0;
+        this.workerDuckBatches = []; // Ducks split into batches for workers
+        
         // Delta time normalization - 60 FPS baseline
         this.targetFPS = 60;
         this.targetFrameTime = 1000 / this.targetFPS; // ~16.67ms
@@ -1783,6 +1796,9 @@ class Game {
                         
                         document.getElementById('duckCount').value = this.duckNames.length;
                         alert(`Đã tải ${this.duckNames.length} tên từ file Excel!`);
+                        
+                        // Update file status UI
+                        this.updateFileStatus(file.name);
                     } else {
                         alert('Không đọc được tên từ file Excel.');
                     }
@@ -1838,6 +1854,9 @@ class Game {
                     
                     document.getElementById('duckCount').value = this.duckNames.length;
                     alert(`Đã tải ${this.duckNames.length} tên từ file CSV!`);
+                    
+                    // Update file status UI
+                    this.updateFileStatus(file.name);
                 } else {
                     alert('Không đọc được tên từ file CSV.');
                 }
@@ -1874,18 +1893,55 @@ class Game {
                 document.getElementById('duckCount').value = this.duckNames.length;
                 console.log(`✓ Restored ${this.duckNames.length} names from localStorage${savedFileName ? ` (${savedFileName})` : ''}`);
                 
-                // Show notification
-                const fileInput = document.getElementById('duckNamesFile');
-                if (fileInput && savedFileName) {
-                    const label = fileInput.parentElement.querySelector('label');
-                    if (label) {
-                        label.textContent = `Excel File (Loaded: ${savedFileName}):`;
-                    }
-                }
+                // Show notification and clear button
+                this.updateFileStatus(savedFileName);
             }
         } catch (e) {
             console.error('Error loading saved data:', e);
         }
+    }
+    
+    updateFileStatus(fileName) {
+        const fileLabel = document.getElementById('fileLabel');
+        const clearBtn = document.getElementById('clearFileBtn');
+        const fileHelp = document.getElementById('fileHelp');
+        
+        if (fileName && this.duckNames.length > 0) {
+            if (fileLabel) fileLabel.innerHTML = `Racer List File <span style="color: #4CAF50;">(✓ Loaded: ${fileName})</span>:`;
+            if (clearBtn) clearBtn.style.display = 'inline-block';
+            if (fileHelp) fileHelp.innerHTML = `<span style="color: #4CAF50;">✓ Using ${this.duckNames.length} names from file. Click Clear to use random names instead.</span>`;
+        } else {
+            if (fileLabel) fileLabel.textContent = 'Racer List File (CSV/Excel):';
+            if (clearBtn) clearBtn.style.display = 'none';
+            if (fileHelp) fileHelp.innerHTML = 'Upload CSV/Excel to use custom names, or leave empty for random names';
+        }
+    }
+    
+    clearLoadedFile() {
+        if (!confirm('Clear loaded file and use random names?\n\nThis will remove all custom names and codes.')) {
+            return;
+        }
+        
+        // Clear data
+        this.duckNames = [];
+        this.duckCodes = [];
+        this.activeDuckNames = [];
+        this.activeDuckCodes = [];
+        
+        // Clear localStorage
+        localStorage.removeItem('duckNames');
+        localStorage.removeItem('duckCodes');
+        localStorage.removeItem('excelFileName');
+        
+        // Clear file input
+        const fileInput = document.getElementById('duckNamesFile');
+        if (fileInput) fileInput.value = '';
+        
+        // Update UI
+        this.updateFileStatus(null);
+        
+        console.log('✓ Cleared loaded file. You can now enter any number of racers.');
+        alert('File cleared! You can now enter any number of racers (up to 2000).');
     }
 
     startRace() {
@@ -2081,8 +2137,8 @@ class Game {
             }
         }
 
-        if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 2000) {
-            alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 2000!`);
+        if (this.duckCount < MINIMUM_PARTICIPANTS || this.duckCount > 10000) {
+            alert(`Number of racers must be between ${MINIMUM_PARTICIPANTS} and 10000!`);
             return;
         }
 
@@ -2235,6 +2291,25 @@ class Game {
             return;
         }
         
+        // Enable canvas rendering for large races (>100 ducks)
+        this.useCanvasRendering = actualDuckCount > 100;
+        if (this.useCanvasRendering) {
+            console.log(`🎨 Canvas mode ENABLED for ${actualDuckCount} ducks`);
+            this.setupCanvasRendering();
+        } else {
+            console.log(`📦 DOM mode for ${actualDuckCount} ducks`);
+            this.cleanupCanvas();
+        }
+        
+        // Enable Web Workers for very large races (>1000 ducks)
+        this.useWorkers = actualDuckCount > 1000;
+        if (this.useWorkers) {
+            console.log(`⚡ Multi-threaded mode ENABLED for ${actualDuckCount} ducks (${this.workerCount} workers)`);
+            this.setupWorkers();
+        } else {
+            this.cleanupWorkers();
+        }
+        
         for (let i = 1; i <= actualDuckCount; i++) {
             const duckName = currentDucks[i - 1];
             const duckCode = currentCodes[i - 1] || '';
@@ -2382,7 +2457,98 @@ class Game {
         safeElementAction('raceNumber', el => el.textContent = `#${this.currentRaceNumber}`);
     }
 
+    setupCanvasRendering() {
+        // Create or get canvas element
+        let canvas = document.getElementById('raceCanvas');
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'raceCanvas';
+            canvas.style.position = 'absolute';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.pointerEvents = 'none';
+            canvas.style.zIndex = '10';
+            this.trackContainer.appendChild(canvas);
+        }
+        
+        // Set canvas resolution to match container
+        const rect = this.trackContainer.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d', { alpha: true });
+        
+        // Enable image smoothing for better quality
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        console.log(`✓ Canvas initialized: ${canvas.width}x${canvas.height}`);
+    }
+    
+    cleanupCanvas() {
+        const canvas = document.getElementById('raceCanvas');
+        if (canvas) {
+            canvas.remove();
+        }
+        this.canvas = null;
+        this.ctx = null;
+    }
+    
+    setupWorkers() {
+        // Create worker pool
+        this.workers = [];
+        for (let i = 0; i < this.workerCount; i++) {
+            try {
+                const worker = new Worker('duck-worker.js');
+                worker.onmessage = (e) => this.handleWorkerMessage(e, i);
+                worker.onerror = (err) => console.error(`Worker ${i} error:`, err);
+                this.workers.push(worker);
+            } catch (error) {
+                console.error('Failed to create worker:', error);
+                this.useWorkers = false;
+                return;
+            }
+        }
+        console.log(`✓ Created ${this.workers.length} worker threads`);
+    }
+    
+    cleanupWorkers() {
+        if (this.workers.length > 0) {
+            this.workers.forEach(w => w.terminate());
+            this.workers = [];
+            console.log('✓ Workers terminated');
+        }
+    }
+    
+    handleWorkerMessage(event, workerIndex) {
+        const { type, ducks } = event.data;
+        
+        if (type === 'DUCKS_UPDATED') {
+            // Merge updated ducks back into main array
+            const batchIndex = workerIndex;
+            if (this.workerDuckBatches[batchIndex]) {
+                // Update ducks in place
+                ducks.forEach((updatedDuck, i) => {
+                    const duckIndex = this.workerDuckBatches[batchIndex].startIndex + i;
+                    if (this.ducks[duckIndex]) {
+                        Object.assign(this.ducks[duckIndex], updatedDuck);
+                    }
+                });
+            }
+            
+            this.pendingWorkerUpdates--;
+        }
+    }
+    
     createDuckElement(duck, index) {
+        // Skip DOM creation if using canvas rendering
+        if (this.useCanvasRendering) {
+            return;
+        }
+        
         // Duck size scales with track height (50% of track height)
         const duckHeight = this.trackHeight * 0.5;
         const topPadding = this.trackHeight * 0.02; // 2% padding
@@ -2871,48 +3037,19 @@ class Game {
         const viewportStart = this.cameraOffset - this.viewportBuffer;
         const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
         const duckCount = this.ducks.length;
-        const isLargeRace = duckCount > 50;
+        const isLargeRace = duckCount > 100;
+        const isVeryLargeRace = duckCount > 500;
         
-        // Update rankings less frequently for large races (every 3 frames)
-        if (!this.rankingUpdateCounter) this.rankingUpdateCounter = 0;
-        this.rankingUpdateCounter++;
-        const shouldUpdateRankings = !isLargeRace || this.rankingUpdateCounter % 3 === 0;
-        
-        this.ducks.forEach((duck, index) => {
-            // Always update finished ducks and ducks near viewport
-            const isNearViewport = duck.position >= viewportStart && duck.position <= viewportEnd;
-            
-            // For large races, only update:
-            // 1. Top 20 ducks (leaders)
-            // 2. Ducks in viewport
-            // 3. Finished ducks
-            // 4. Every 5th duck for basic position tracking
-            const isLeader = index < 20;
-            const shouldUpdate = duck.finished || isNearViewport || isLeader || (!isLargeRace && index % 5 === 0);
-            
-            if (shouldUpdate) {
-                const currentRank = shouldUpdateRankings ? (this.rankings.findIndex(d => d.id === duck.id) + 1 || duckCount) : (duck.lastRank || duckCount);
-                
-                // Check if we're in slowdown zone (within 500px of finish)
-                const leader = this.rankings[0];
-                const distanceToFinish = leader ? this.trackLength - leader.position : Infinity;
-                const inSlowdownZone = distanceToFinish <= 500;
-                
-                duck.update(timestamp || Date.now(), currentRank, duckCount, this.deltaTime, inSlowdownZone);
-                duck.lastRank = currentRank; // Cache rank for next frame
-            } else {
-                // Lightweight update for off-screen ducks - only position, no animation
-                if (!duck.finished) {
-                    duck.position += (duck.speed || duck.baseSpeed) * this.deltaTime;
-                    // Skip DOM updates completely for culled ducks
-                    if (duck.element) {
-                        duck.element.style.display = 'none';
-                    }
-                }
-            }
-        });
+        // Use Web Workers for physics updates if enabled
+        if (this.useWorkers && this.workers.length > 0 && this.pendingWorkerUpdates === 0) {
+            this.updateDucksWithWorkers(timestamp, viewportStart, viewportEnd);
+        } else {
+            // Single-threaded updates for smaller races or fallback
+            this.updateDucksSingleThreaded(timestamp, viewportStart, viewportEnd, duckCount, isLargeRace, isVeryLargeRace);
+        }
 
         // Update rankings only when needed
+        const shouldUpdateRankings = !this.rankingUpdateCounter || this.rankingUpdateCounter % (isVeryLargeRace ? 10 : 5) === 0;
         if (shouldUpdateRankings) {
             const oldRankings = [...this.rankings];
             this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
@@ -3087,7 +3224,81 @@ class Game {
         // this.updateLeaderboard(); // Function removed
     }
 
+    updateDucksWithWorkers(timestamp, viewportStart, viewportEnd) {
+        // Split ducks into batches for workers
+        const batchSize = Math.ceil(this.ducks.length / this.workerCount);
+        this.workerDuckBatches = [];
+        
+        for (let i = 0; i < this.workerCount; i++) {
+            const startIndex = i * batchSize;
+            const endIndex = Math.min(startIndex + batchSize, this.ducks.length);
+            const batch = this.ducks.slice(startIndex, endIndex);
+            
+            if (batch.length > 0) {
+                this.workerDuckBatches.push({ startIndex, batch });
+                this.pendingWorkerUpdates++;
+                
+                // Send batch to worker
+                this.workers[i].postMessage({
+                    type: 'UPDATE_DUCKS',
+                    data: {
+                        ducks: batch,
+                        deltaTime: this.deltaTime,
+                        trackLength: this.trackLength,
+                        rankings: this.rankings,
+                        timestamp: timestamp || Date.now(),
+                        cameraOffset: this.cameraOffset,
+                        viewportWidth: this.viewportWidth,
+                        viewportBuffer: this.viewportBuffer
+                    }
+                });
+            }
+        }
+    }
+    
+    updateDucksSingleThreaded(timestamp, viewportStart, viewportEnd, duckCount, isLargeRace, isVeryLargeRace) {
+        // Update rankings less frequently for large races
+        if (!this.rankingUpdateCounter) this.rankingUpdateCounter = 0;
+        this.rankingUpdateCounter++;
+        const rankingUpdateFrequency = isVeryLargeRace ? 10 : (isLargeRace ? 5 : 3);
+        const shouldUpdateRankings = this.rankingUpdateCounter % rankingUpdateFrequency === 0;
+        
+        this.ducks.forEach((duck, index) => {
+            // Always update finished ducks and ducks near viewport
+            const isNearViewport = duck.position >= viewportStart && duck.position <= viewportEnd;
+            
+            // For very large races (500+), extremely aggressive culling:
+            const leaderCount = isVeryLargeRace ? 10 : 20;
+            const isLeader = index < leaderCount;
+            const shouldUpdate = duck.finished || isNearViewport || isLeader;
+            
+            if (shouldUpdate) {
+                const currentRank = shouldUpdateRankings ? (this.rankings.findIndex(d => d.id === duck.id) + 1 || duckCount) : (duck.lastRank || duckCount);
+                
+                // Check if we're in slowdown zone (within 500px of finish)
+                const leader = this.rankings[0];
+                const distanceToFinish = leader ? this.trackLength - leader.position : Infinity;
+                const inSlowdownZone = distanceToFinish <= 500;
+                
+                duck.update(timestamp || Date.now(), currentRank, duckCount, this.deltaTime, inSlowdownZone);
+                duck.lastRank = currentRank;
+            } else {
+                // Ultra-lightweight update for off-screen ducks
+                if (!duck.finished) {
+                    duck.position += (duck.speed || duck.baseSpeed) * this.deltaTime;
+                }
+            }
+        });
+    }
+    
     updateDuckPositions() {
+        // Use canvas rendering for large races
+        if (this.useCanvasRendering && this.ctx) {
+            this.updateDuckPositionsCanvas();
+            return;
+        }
+        
+        // DOM rendering for smaller races
         const viewportStart = this.cameraOffset - this.viewportBuffer;
         const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
         const currentVisibleDucks = new Set();
@@ -3096,6 +3307,9 @@ class Game {
             console.error('trackContainer is null in updateDuckPositions!');
             return;
         }
+        
+        // Batch DOM operations for better performance
+        const domUpdates = [];
         
         this.ducks.forEach(duck => {
             const screenX = duck.position - this.cameraOffset;
@@ -3147,36 +3361,153 @@ class Game {
                     this.duckElements.set(duck.id, duckEl);
                 }
                 
-                // Update visible ducks
-                // Add visual animation offset when background stops (creates illusion of continued movement)
+                // Batch style updates
                 const visualOffset = this.duckVisualSpeed ? Math.sin(Date.now() * 0.005) * this.duckVisualSpeed * 5 : 0;
-                duckEl.style.left = `${screenX + visualOffset}px`;
-                duckEl.style.display = '';
+                const newLeft = screenX + visualOffset;
                 
-                const wobble = duck.getWobble(Date.now());
-                const laneShift = duck.laneOffset || 0;
-                duckEl.style.transform = `translateY(${wobble + laneShift}px)`;
+                // Only update if position changed significantly (>1px)
+                if (!duck._lastScreenX || Math.abs(newLeft - duck._lastScreenX) > 1) {
+                    domUpdates.push(() => {
+                        duckEl.style.left = `${newLeft}px`;
+                        duckEl.style.display = '';
+                    });
+                    duck._lastScreenX = newLeft;
+                }
                 
-                // Update animation frame only for visible ducks
-                if (this.imagesLoaded && this.duckImages.length > 0) {
+                // Skip wobble animation for large races (500+ ducks)
+                if (this.ducks.length < 500) {
+                    const wobble = duck.getWobble(Date.now());
+                    const laneShift = duck.laneOffset || 0;
+                    domUpdates.push(() => {
+                        duckEl.style.transform = `translateY(${wobble + laneShift}px)`;
+                    });
+                }
+                
+                // Update animation frame only every 3rd frame for large races
+                const shouldUpdateFrame = this.ducks.length < 500 || (this.rankingUpdateCounter || 0) % 3 === 0;
+                if (shouldUpdateFrame && this.imagesLoaded && this.duckImages.length > 0) {
                     const iconIndex = (duck.id - 1) % this.duckImages.length;
                     const imgEl = duckEl.querySelector('.duck-icon');
                     if (imgEl && this.duckImages[iconIndex] && this.duckImages[iconIndex][duck.currentFrame]) {
-                        imgEl.src = this.duckImages[iconIndex][duck.currentFrame].src;
+                        domUpdates.push(() => {
+                            imgEl.src = this.duckImages[iconIndex][duck.currentFrame].src;
+                        });
                     }
                 }
             } else {
-                // Hide off-screen ducks instead of removing them
+                // Hide off-screen ducks - batch this too
                 const duckEl = this.duckElements.get(duck.id);
-                if (duckEl) {
-                    duckEl.style.display = 'none';
+                if (duckEl && duckEl.style.display !== 'none') {
+                    domUpdates.push(() => {
+                        duckEl.style.display = 'none';
+                    });
                 }
             }
         });
         
+        // Apply all DOM updates in one batch using requestAnimationFrame
+        // This reduces layout thrashing significantly
+        if (domUpdates.length > 0) {
+            for (const update of domUpdates) {
+                update();
+            }
+        }
+        
         this.visibleDucks = currentVisibleDucks;
     }
 
+    updateDuckPositionsCanvas() {
+        if (!this.ctx || !this.canvas) return;
+        
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Calculate duck metrics
+        const duckHeight = this.trackHeight * 0.5;
+        const topPadding = this.trackHeight * 0.02;
+        const bottomPadding = this.trackHeight * 0.02;
+        const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
+        const laneHeight = availableHeight / Math.max(1, this.duckCount - 1);
+        
+        // Viewport culling for canvas
+        const viewportStart = this.cameraOffset - this.viewportBuffer;
+        const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
+        
+        let drawnCount = 0;
+        const visualOffset = this.duckVisualSpeed ? Math.sin(Date.now() * 0.005) * this.duckVisualSpeed * 5 : 0;
+        
+        // Draw all visible ducks
+        this.ducks.forEach((duck, index) => {
+            const screenX = duck.position - this.cameraOffset;
+            const isVisible = duck.position >= viewportStart && duck.position <= viewportEnd;
+            
+            if (!isVisible) return;
+            
+            drawnCount++;
+            
+            // Calculate Y position
+            const yPos = topPadding + index * laneHeight;
+            const wobble = duck.getWobble(Date.now());
+            const laneShift = duck.laneOffset || 0;
+            const finalY = yPos + wobble + laneShift;
+            
+            const finalX = screenX + visualOffset;
+            
+            // Draw duck image if loaded
+            if (this.imagesLoaded && this.duckImages.length > 0) {
+                const iconIndex = (duck.id - 1) % this.duckImages.length;
+                const frameImages = this.duckImages[iconIndex];
+                if (frameImages && frameImages[duck.currentFrame]) {
+                    const img = frameImages[duck.currentFrame];
+                    if (img.complete) {
+                        this.ctx.drawImage(img, finalX, finalY, duckHeight, duckHeight);
+                    }
+                }
+            } else {
+                // Fallback: Draw colored circle
+                this.ctx.fillStyle = duck.color;
+                this.ctx.beginPath();
+                this.ctx.arc(finalX + duckHeight/2, finalY + duckHeight/2, duckHeight/2, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            
+            // Draw name label for ALL visible ducks (phía TRƯỚC icon - bên trái, căn giữa theo chiều dọc)
+            // Font size scales với số lượng ducks
+            const fontSize = this.duckCount > 500 ? 10 : (this.duckCount > 200 ? 12 : 14);
+            this.ctx.font = `bold ${fontSize}px Arial`;
+            this.ctx.fillStyle = 'white';
+            this.ctx.strokeStyle = 'black';
+            this.ctx.lineWidth = 3;
+            
+            // Truncate long names
+            const maxNameLength = this.duckCount > 500 ? 15 : 20;
+            const name = duck.name.length > maxNameLength ? duck.name.substring(0, maxNameLength - 2) + '..' : duck.name;
+            
+            // Measure text width to position it left of icon
+            const textMetrics = this.ctx.measureText(name);
+            const textWidth = textMetrics.width;
+            
+            // Position: Bên TRÁI icon, căn giữa theo chiều dọc
+            const textX = finalX - textWidth - 5; // 5px gap from icon, text positioned to the left
+            const textY = finalY + (duckHeight / 2) + (fontSize / 3); // Căn giữa theo icon (baseline adjustment)
+            
+            // Draw with outline for better visibility
+            this.ctx.strokeText(name, textX, textY);
+            this.ctx.fillText(name, textX, textY);
+        });
+        
+        // Performance stats overlay (top-right corner)
+        if (drawnCount > 200) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(this.canvas.width - 200, 10, 190, 60);
+            this.ctx.fillStyle = '#00ff00';
+            this.ctx.font = 'bold 14px monospace';
+            this.ctx.fillText(`Canvas Mode`, this.canvas.width - 190, 30);
+            this.ctx.fillText(`Ducks: ${this.duckCount}`, this.canvas.width - 190, 48);
+            this.ctx.fillText(`Visible: ${drawnCount}`, this.canvas.width - 190, 66);
+        }
+    }
+    
     updateBackgrounds() {
         const raceRiver = document.getElementById('raceRiver');
         const bankTop = document.getElementById('bankTop');

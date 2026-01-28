@@ -23,7 +23,7 @@
             <h2>Race Settings</h2>
             <div class="input-group">
                 <label for="duckCount">Number of Racers:</label>
-                <input type="number" id="duckCount" min="10" max="2000" value="300">
+                <input type="number" id="duckCount" min="10" max="10000" value="300">
             </div>
             <div class="input-group">
                 <label for="raceDuration">Race Duration (seconds):</label>
@@ -49,9 +49,12 @@
                 <small style="color: #888;">How many winners to wait for (1-50)</small>
             </div>
             <div class="input-group">
-                <label for="duckNamesFile">Racer List File (CSV/Excel):</label>
-                <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)">
-                <small style="color: #888;">Upload CSV file with columns: No. and Name</small>
+                <label for="duckNamesFile" id="fileLabel">Racer List File (CSV/Excel):</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="file" id="duckNamesFile" accept=".csv,.xlsx" onchange="game.loadDuckNames(event)" style="flex: 1;">
+                    <button onclick="game.clearLoadedFile()" id="clearFileBtn" class="btn btn-warning" style="display: none; padding: 8px 16px;">🗑️ Clear</button>
+                </div>
+                <small style="color: #888;" id="fileHelp">Upload CSV/Excel to use custom names, or leave empty for random names</small>
             </div>
             <div class="input-group">
                 <label for="iconTheme">Icon Theme:</label>
