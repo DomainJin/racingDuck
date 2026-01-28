@@ -23,7 +23,7 @@
             <h2>Race Settings</h2>
             <div class="input-group">
                 <label for="duckCount">Number of Racers:</label>
-                <input type="number" id="duckCount" min="10" max="10000" value="300">
+                <input type="number" id="duckCount" min="10" max="10000" value="3000">
             </div>
             <div class="input-group">
                 <label for="raceDuration">Race Duration (seconds):</label>
@@ -290,7 +290,7 @@
                 <h2 class="winner-name" id="winnerName">Winner Name</h2>
                 <div class="winner-stats" id="winnerStats"></div>
             </div>
-            <div class="victory-footer">
+            <div class="victory-footer" style="display: none;">
                 <button class="btn btn-primary" onclick="game.continueRace()">🎯 Continue (Next Race)</button>
                 <button class="btn btn-secondary" onclick="game.closeVictoryPopup(); game.showWinnersPanel()">📋 View Results</button>
             </div>
@@ -307,7 +307,7 @@
             <div class="victory-body victory-body-topn" id="topNWinnersGrid">
                 <!-- Winners will be populated here -->
             </div>
-            <div class="victory-footer">
+            <div class="victory-footer" style="display: none;">
                 <button class="btn btn-primary" onclick="game.closeTopNVictoryPopup(); game.resetRace()">▶️ Next Race</button>
                 <button class="btn btn-secondary" onclick="game.closeTopNVictoryPopup(); game.fullReset()">🔄 Play Again</button>
                 <button class="btn btn-secondary" onclick="game.closeTopNVictoryPopup(); game.showTopNResultPanel()">📋 View Full Results</button>

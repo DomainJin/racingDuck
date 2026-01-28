@@ -879,41 +879,76 @@ h1 {
     left: 0;
     top: 80px;
     bottom: 50px;
-    width: 20px;
+    width: 60px; /* Tăng từ 20px lên 60px */
     background: repeating-linear-gradient(
         0deg,
         black 0px,
-        black 10px,
-        white 10px,
-        white 20px
+        black 15px,
+        white 15px,
+        white 30px
     );
-    border: 4px solid red;
-    box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
-    z-index: 15;
+    border: 6px solid red; /* Tăng border */
+    box-shadow: 0 0 40px rgba(255, 0, 0, 0.9), /* Tăng glow */
+                0 0 80px rgba(255, 215, 0, 0.6);
+    z-index: 5 !important; /* Phía sau ducks để thấy con nào cán đích trước */
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: finishLinePulse 1.5s ease-in-out infinite; /* Thêm animation */
+    pointer-events: none; /* Không block mouse events */
+}
+
+@keyframes finishLinePulse {
+    0%, 100% {
+        box-shadow: 0 0 40px rgba(255, 0, 0, 0.9),
+                    0 0 80px rgba(255, 215, 0, 0.6);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 60px rgba(255, 0, 0, 1),
+                    0 0 100px rgba(255, 215, 0, 0.8);
+        transform: scale(1.05);
+    }
 }
 
 .finish-line.visible {
-    display: flex;
+    display: flex !important;
+    opacity: 1 !important;
 }
 
 .finish-line.hidden {
-    display: none;
+    display: none !important;
+    opacity: 0 !important;
 }
 
 .finish-line::after {
     content: 'FINISH';
     position: absolute;
-    top: -25px;
+    top: -40px; /* Di chuyển lên cao hơn */
     left: 50%;
     transform: translateX(-50%);
-    color: white;
+    color: #FFD700; /* Vàng gold */
     font-weight: bold;
-    font-size: 14px;
-    text-shadow: 2px 2px 4px black;
+    font-size: 28px; /* Tăng từ 14px lên 28px */
+    text-shadow: 3px 3px 6px black,
+                 0 0 20px rgba(255, 215, 0, 0.8),
+                 0 0 40px rgba(255, 0, 0, 0.6);
     white-space: nowrap;
+    letter-spacing: 3px;
+    animation: finishTextGlow 1s ease-in-out infinite;
+}
+
+@keyframes finishTextGlow {
+    0%, 100% {
+        text-shadow: 3px 3px 6px black,
+                     0 0 20px rgba(255, 215, 0, 0.8),
+                     0 0 40px rgba(255, 0, 0, 0.6);
+    }
+    50% {
+        text-shadow: 3px 3px 6px black,
+                     0 0 30px rgba(255, 215, 0, 1),
+                     0 0 60px rgba(255, 0, 0, 0.9);
+    }
 }
 
 
@@ -930,7 +965,7 @@ h1 {
     width: 100%;
     border: 3px solid rgba(255, 255, 255, 0.1);
     animation: canvasGlow 3s ease-in-out infinite alternate;
-    z-index: 2;
+    z-index: 100 !important; /* Cao hơn finish line để ducks hiện trước */
     
     /* GPU Acceleration */
     transform: translateZ(0);
@@ -1170,6 +1205,8 @@ h1 {
     cursor: default;
     overflow: hidden;
     box-sizing: border-box;
+    background: transparent !important;
+    backdrop-filter: none !important;
 }
 
 .result-panel.fullscreen #resultTitle {
@@ -1272,8 +1309,8 @@ h1 {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(10px);
+    background: transparent !important; /* Trong suốt hoàn toàn để thấy đường đua */
+    backdrop-filter: none; /* Không blur */
     border-radius: 20px;
     z-index: 1;
 }
@@ -1281,13 +1318,13 @@ h1 {
 .victory-content {
     position: relative;
     z-index: 2;
-    background: linear-gradient(135deg, rgba(218, 214, 12, 0.9) 0%, rgba(238, 30, 30, 0.9) 100%);
+    background: transparent !important;
+    backdrop-filter: none !important;
     border-radius: 50%;
     padding: 5%;
     width: min(90vw, 90vh, 600px);
     height: min(90vw, 90vh, 600px);
-    box-shadow: 0 20px 60px rgba(230, 26, 26, 0.705),
-                0 0 100px rgba(206, 106, 14, 0.5);
+    box-shadow: none;
     animation: victoryBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     transform: scale(0);
     display: flex;

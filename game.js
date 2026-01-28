@@ -24,6 +24,19 @@ class SoundManager {
         this.crowdNoiseInterval = null;
         this.customAudioBuffer = null; // For loaded mp3/wav files
         this.customAudioSource = null; // Current playing source
+        
+        // Audio buffers for different stages
+        this.startAudioBuffer = null;  // start.mp3 (3s)
+        this.raceAudioBuffer = null;   // race.mp3 (30s)
+        this.endAudioBuffer = null;    // end.mp3
+        
+        // Audio sources
+        this.startAudioSource = null;
+        this.raceAudioSource = null;
+        this.endAudioSource = null;
+        
+        // Load audio files from static folder
+        this.loadStaticAudio();
     }
 
     init() {
@@ -33,6 +46,55 @@ class SoundManager {
             this.initialized = true;
         } catch (e) {
             console.log('Audio not supported');
+        }
+    }
+
+    // Load audio files from static folder
+    async loadStaticAudio() {
+        if (!this.context) {
+            try {
+                this.context = new (window.AudioContext || window.webkitAudioContext)();
+                this.initialized = true;
+            } catch (e) {
+                console.log('Audio not supported');
+                return;
+            }
+        }
+
+        try {
+            // Load start.mp3
+            const startResponse = await fetch('static/start.mp3');
+            if (startResponse.ok) {
+                const startArrayBuffer = await startResponse.arrayBuffer();
+                this.startAudioBuffer = await this.context.decodeAudioData(startArrayBuffer);
+                console.log('✅ start.mp3 loaded:', this.startAudioBuffer.duration.toFixed(1) + 's');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not load start.mp3:', error.message);
+        }
+
+        try {
+            // Load race.mp3
+            const raceResponse = await fetch('static/race.mp3');
+            if (raceResponse.ok) {
+                const raceArrayBuffer = await raceResponse.arrayBuffer();
+                this.raceAudioBuffer = await this.context.decodeAudioData(raceArrayBuffer);
+                console.log('✅ race.mp3 loaded:', this.raceAudioBuffer.duration.toFixed(1) + 's');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not load race.mp3:', error.message);
+        }
+
+        try {
+            // Load end.mp3
+            const endResponse = await fetch('static/end.mp3');
+            if (endResponse.ok) {
+                const endArrayBuffer = await endResponse.arrayBuffer();
+                this.endAudioBuffer = await this.context.decodeAudioData(endArrayBuffer);
+                console.log('✅ end.mp3 loaded:', this.endAudioBuffer.duration.toFixed(1) + 's');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not load end.mp3:', error.message);
         }
     }
 
@@ -89,10 +151,25 @@ class SoundManager {
 
     playStartSound() {
         if (!this.enabled || !this.initialized) return;
-        // Horn sound - trumpet style
-        this.playBeep(500, 0.15, 0.3);
-        setTimeout(() => this.playBeep(600, 0.15, 0.3), 100);
-        setTimeout(() => this.playBeep(700, 0.2, 0.5), 200);
+        
+        // Play start.mp3 if loaded
+        if (this.startAudioBuffer && this.context) {
+            // Stop previous start sound if playing
+            if (this.startAudioSource) {
+                try { this.startAudioSource.stop(); } catch (e) {}
+            }
+            
+            this.startAudioSource = this.context.createBufferSource();
+            this.startAudioSource.buffer = this.startAudioBuffer;
+            this.startAudioSource.connect(this.context.destination);
+            this.startAudioSource.start(0);
+            console.log('🔊 Playing start.mp3 (3s countdown)');
+        } else {
+            // Fallback: Horn sound - trumpet style
+            this.playBeep(500, 0.15, 0.3);
+            setTimeout(() => this.playBeep(600, 0.15, 0.3), 100);
+            setTimeout(() => this.playBeep(700, 0.2, 0.5), 200);
+        }
     }
 
     playCrowdCheer() {
@@ -107,13 +184,31 @@ class SoundManager {
 
     playFinishSound() {
         if (!this.enabled || !this.initialized) return;
-        // Victory fanfare
-        this.playBeep(1000, 0.15, 0.2);
-        setTimeout(() => this.playBeep(1200, 0.15, 0.2), 150);
-        setTimeout(() => this.playBeep(1500, 0.2, 0.4), 300);
         
-        // Add crowd cheer
-        setTimeout(() => this.playCrowdCheer(), 200);
+        // Stop race.mp3 first
+        this.stopRacingAmbiance();
+        
+        // Play end.mp3 if loaded
+        if (this.endAudioBuffer && this.context) {
+            // Stop previous end sound if playing
+            if (this.endAudioSource) {
+                try { this.endAudioSource.stop(); } catch (e) {}
+            }
+            
+            this.endAudioSource = this.context.createBufferSource();
+            this.endAudioSource.buffer = this.endAudioBuffer;
+            this.endAudioSource.connect(this.context.destination);
+            this.endAudioSource.start(0);
+            console.log('🔊 Playing end.mp3 (victory sound)');
+        } else {
+            // Fallback: Victory fanfare
+            this.playBeep(1000, 0.15, 0.2);
+            setTimeout(() => this.playBeep(1200, 0.15, 0.2), 150);
+            setTimeout(() => this.playBeep(1500, 0.2, 0.4), 300);
+            
+            // Add crowd cheer
+            setTimeout(() => this.playCrowdCheer(), 200);
+        }
     }
 
     // Horse galloping sound effect
@@ -131,16 +226,41 @@ class SoundManager {
     }
 
     // Start continuous racing ambiance
-    startRacingAmbiance() {
+    startRacingAmbiance(raceDuration = 30) {
         if (!this.enabled || !this.initialized) return;
         
-        // If custom audio is loaded, play it instead of procedural sounds
+        // Play race.mp3 if loaded
+        if (this.raceAudioBuffer && this.context) {
+            // Stop previous race sound if playing
+            if (this.raceAudioSource) {
+                try { this.raceAudioSource.stop(); } catch (e) {}
+            }
+            
+            this.raceAudioSource = this.context.createBufferSource();
+            this.raceAudioSource.buffer = this.raceAudioBuffer;
+            this.raceAudioSource.connect(this.context.destination);
+            
+            // Loop if race duration > 30s
+            const raceMp3Duration = this.raceAudioBuffer.duration; // ~30s
+            if (raceDuration > raceMp3Duration) {
+                this.raceAudioSource.loop = true;
+                console.log('🔊 Playing race.mp3 in LOOP (race duration:', raceDuration + 's)');
+            } else {
+                this.raceAudioSource.loop = false;
+                console.log('🔊 Playing race.mp3 once (race duration:', raceDuration + 's)');
+            }
+            
+            this.raceAudioSource.start(0);
+            return;
+        }
+        
+        // Fallback: If custom audio is loaded, play it instead of procedural sounds
         if (this.customAudioBuffer) {
             this.playCustomAudio();
             return;
         }
         
-        // Horse galloping loop - continuous hooves sound
+        // Fallback: Horse galloping loop - continuous hooves sound
         this.raceLoopInterval = setInterval(() => {
             // Multiple horses galloping
             for (let i = 0; i < 3; i++) {
@@ -180,6 +300,15 @@ class SoundManager {
 
     // Stop racing ambiance
     stopRacingAmbiance() {
+        // Stop race.mp3 if playing
+        if (this.raceAudioSource) {
+            try {
+                this.raceAudioSource.stop();
+                console.log('🔇 Stopped race.mp3');
+            } catch (e) {}
+            this.raceAudioSource = null;
+        }
+        
         if (this.raceLoopInterval) {
             clearInterval(this.raceLoopInterval);
             this.raceLoopInterval = null;
@@ -190,7 +319,7 @@ class SoundManager {
         }
         // Stop custom audio if playing
         if (this.customAudioSource) {
-            this.customAudioSource.stop();
+            try { this.customAudioSource.stop(); } catch (e) {}
             this.customAudioSource = null;
         }
     }
@@ -267,13 +396,21 @@ class Duck {
         this.turboTimer = 0;
         this.turboDuration = 833; // ~50 frames at 60fps = 833ms
         this.wingFlapSpeed = 1;
+        this.targetWingFlapSpeed = 1; // Target for smooth wing flap transitions
         this.laneOffset = 0;
         this.targetLaneOffset = 0;
         this.laneChangeTimer = 0;
         this.laneChangeInterval = 2000; // 2 seconds
         this.currentFrame = 0;
         this.lastFrameTime = 0;
-        this.animationFPS = 12; // FPS cho animation webp
+        this.animationFPS = 20; // Increased from 12 to 20 FPS for smoother animation
+        
+        // Lane management for finish line collision avoidance
+        this.lane = Math.floor(Math.random() * 5); // 0-4: 5 lanes for smoother transitions
+        this.preferredLane = this.lane;
+        this.laneChangeSpeed = 0.05; // Smooth lane transitions
+        this.lastLaneChangeTime = 0; // Timestamp of last lane change
+        this.laneChangeCooldown = 1000; // 1 second cooldown between lane changes
     }
 
     generateColor() {
@@ -304,9 +441,12 @@ class Duck {
             // Smooth lane transition
             this.laneOffset += (this.targetLaneOffset - this.laneOffset) * 0.05 * deltaTime;
             
-            // Animation frame update với FPS cố định 12
+            // Smooth wing flap speed transition (reduced from instant to gradual)
+            this.wingFlapSpeed += (this.targetWingFlapSpeed - this.wingFlapSpeed) * 0.1;
+            
+            // Animation frame update với FPS cố định 20 (increased for smoother motion)
             const currentTime = Date.now();
-            const frameInterval = 1000 / this.animationFPS; // ~83ms cho 12 FPS
+            const frameInterval = 1000 / this.animationFPS; // ~50ms cho 20 FPS
             if (currentTime - this.lastFrameTime >= frameInterval) {
                 this.lastFrameTime = currentTime;
                 this.currentFrame = (this.currentFrame + 1) % 3; // Cycle through 0, 1, 2
@@ -335,20 +475,20 @@ class Duck {
                     this.targetSpeed = this.maxSpeed * (boostMultiplier + Math.random() * 0.5);
                     this.turboActive = true;
                     this.turboTimer = this.turboDuration; // 833ms (~50 frames at 60fps)
-                    this.wingFlapSpeed = 3;
+                    this.targetWingFlapSpeed = 3; // Smooth transition to fast flap
                 } else if (rand > 0.60) {
                     // Fast speed
                     this.targetSpeed = this.baseSpeed * (1.5 + Math.random() * 0.7);
-                    this.wingFlapSpeed = 2;
+                    this.targetWingFlapSpeed = 2; // Smooth transition
                 } else if (rand < slowDownChance) {
                     // Sudden slowdown - more severe for leaders
                     const slowMultiplier = isLeader ? 0.2 : isTop3 ? 0.4 : 0.6;
                     this.targetSpeed = this.minSpeed * (slowMultiplier + Math.random() * 0.2);
-                    this.wingFlapSpeed = 0.2;
+                    this.targetWingFlapSpeed = 0.5; // Smooth transition (increased from 0.2)
                 } else {
                     // Normal speed with variation
                     this.targetSpeed = this.baseSpeed * (0.7 + Math.random() * 0.6);
-                    this.wingFlapSpeed = 1;
+                    this.targetWingFlapSpeed = 1; // Smooth transition
                 }
             }
             
@@ -379,21 +519,23 @@ class Duck {
                 this.targetSpeed = this.baseSpeed * slowdownFactor * 0.5;
             }
             
-            this.acceleration = (this.targetSpeed - this.speed) * 0.05;
+            // Smooth acceleration - REDUCED for ultra-smooth movement
+            // Lower value = slower speed transitions = smoother camera tracking
+            this.acceleration = (this.targetSpeed - this.speed) * 0.05; // Reduced from 0.15 to 0.05
             this.speed += this.acceleration;
             this.speed = Math.max(this.minSpeed, Math.min(this.maxSpeed * 1.7, this.speed));
             
             // Boost speed when camera/background are stopping (inSlowdownZone) to maintain visual motion
             let speedMultiplier = 1.0;
             if (inSlowdownZone) {
-                // Increase multiplier as camera slows down (1.0 to 2.5x)
+                // Increase multiplier as camera slows down (1.0 to 1.8x) - reduced for smoother motion
                 const leader = this.trackLength - this.position;
                 const slowdownProgress = Math.max(0, Math.min(1, (500 - leader) / 500)); // 0 at 500px, 1 at finish
-                speedMultiplier = 1.0 + (slowdownProgress * 1.5); // Gradually increase from 1.0x to 2.5x
+                speedMultiplier = 1.0 + (slowdownProgress * 0.8); // Gradually increase from 1.0x to 1.8x
             }
             
-            // Position movement normalized to 60 FPS
-            this.position += (this.speed + (Math.random() - 0.5) * 0.3) * deltaTime * speedMultiplier;
+            // Position movement normalized to 60 FPS - removed random jitter for smooth motion
+            this.position += this.speed * deltaTime * speedMultiplier;
             
             // Update particles (time-based)
             this.particles = this.particles.filter(p => {
@@ -425,7 +567,8 @@ class Duck {
     }
 
     getWobble(time) {
-        return Math.sin(time * 0.015 + this.wobbleOffset) * 4;
+        // WOBBLE COMPLETELY DISABLED - causes violent shaking when camera moves
+        return 0;
     }
     
     getSpeedIndicator() {
@@ -565,9 +708,12 @@ class Game {
         this.targetFrameTime = 1000 / this.targetFPS; // ~16.67ms
         this.lastFrameTime = 0;
         this.deltaTime = 1.0; // Multiplier for frame-independent movement
+        this.smoothedDeltaTime = 1.0; // Smoothed delta time to prevent jitter
         
+        // Smooth camera system with velocity
         this.cameraOffset = 0;
-        this.smoothCameraTarget = 0; // Smooth camera target for lerping
+        this.cameraVelocity = 0;  // Camera movement velocity for smooth soft start/stop
+        this.smoothCameraTarget = 0; // EMA smoothed target for ultra-smooth movement
         this.lastCameraOffset = 0; // Track last camera position to prevent backwards movement
         this.backgroundOffset = 0;
         this.targetBackgroundOffset = 0; // Target position for smooth background scrolling
@@ -2393,6 +2539,7 @@ class Game {
         if (timeLeft) timeLeft.textContent = `${this.raceDuration}s`;
         if (fullscreenBtn) fullscreenBtn.textContent = '🚀 Start';
 
+        // Initialize sound manager
         this.soundManager.init();
     }
 
@@ -2411,6 +2558,9 @@ class Game {
         if (this.isDisplayMode) {
             // Finish line will be revealed by animate() logic when close to finish
             
+            // Play start sound IMMEDIATELY when Start button clicked (during 3s countdown)
+            this.soundManager.playStartSound();
+            
             // Show countdown directly without fullscreen
             this.showCountdown(() => {
                 // Set start time AFTER countdown finishes (only if not already set from control)
@@ -2419,8 +2569,8 @@ class Game {
                 }
                 console.log('=== RACE START ===');
                 console.log('Start time:', new Date(this.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }));
-                this.soundManager.playStartSound();
-                this.soundManager.startRacingAmbiance(); // Start horse galloping sounds
+                // Play race ambiance when countdown finishes
+                this.soundManager.startRacingAmbiance(this.raceDuration);
                 
                 // Reset frame time tracking and start animation loop
                 this.lastFrameTime = Date.now();
@@ -2665,9 +2815,8 @@ class Game {
             console.log('Control: Set currentRaceWinners from display:', this.currentRaceWinners.length, 'winners');
         }
         
-        // Play sounds on control panel
+        // Play finish sounds (stops race.mp3, plays end.mp3)
         this.soundManager.playFinishSound();
-        setTimeout(() => this.soundManager.playCrowdCheer(), 300);
         
         // Send messages to display based on mode from display data
         if (this.displayChannel) {
@@ -2846,7 +2995,8 @@ class Game {
                 this.animationId = null;
             }
             
-            this.soundManager.stopRacingAmbiance(); // Stop sounds when paused
+            // Stop race sounds when paused
+            this.soundManager.stopRacingAmbiance();
             safeElementAction('pauseBtn', el => el.disabled = true);
             safeElementAction('resumeBtn', el => el.disabled = false);
             safeElementAction('raceStatus', el => el.textContent = 'Paused');
@@ -2867,7 +3017,8 @@ class Game {
             this.racePaused = false;
             const pauseDuration = Date.now() - this.pausedTime;
             this.startTime += pauseDuration;
-            this.soundManager.startRacingAmbiance(); // Resume sounds when resumed
+            // Resume race sounds
+            this.soundManager.startRacingAmbiance(this.raceDuration);
             safeElementAction('pauseBtn', el => el.disabled = false);
             safeElementAction('resumeBtn', el => el.disabled = true);
             safeElementAction('raceStatus', el => el.textContent = 'Racing!');
@@ -2895,6 +3046,7 @@ class Game {
 
         // Calculate delta time for frame-independent movement
         const currentTime = Date.now();
+        
         if (!this.lastFrameTime) this.lastFrameTime = currentTime;
         const frameTime = currentTime - this.lastFrameTime;
         
@@ -2905,11 +3057,23 @@ class Game {
         
         // Delta time multiplier: 1.0 at 60fps, >1.0 for slower fps, <1.0 for faster fps
         this.deltaTime = frameTime / this.targetFrameTime;
-        // Clamp delta time to prevent huge jumps (max 4x, min 0.5x for smoother performance)
-        this.deltaTime = Math.max(0.5, Math.min(4.0, this.deltaTime));
-        
+
+        // Clamp delta time to a very tight range to prevent visible jumps
+        this.deltaTime = Math.max(0.8, Math.min(1.2, this.deltaTime));
+
         // Apply game speed multiplier
         this.deltaTime *= this.gameSpeed;
+
+        // If deltaTime is still too large (frame drop), skip this frame to avoid jitter
+        if (this.deltaTime > 1.5) {
+            // Optionally log for debugging
+            console.warn('Frame skipped due to large deltaTime:', this.deltaTime);
+            return;
+        }
+
+        // Smooth delta time with exponential moving average to reduce jitter
+        const smoothingFactor = 0.85; // Higher = more smoothing (0-1)
+        this.smoothedDeltaTime = this.smoothedDeltaTime * smoothingFactor + this.deltaTime * (1 - smoothingFactor);
 
         // Calculate elapsed time - always use real time to keep race duration accurate
         // gameSpeed only affects visual speed, not race duration
@@ -3050,14 +3214,33 @@ class Game {
 
         // Update rankings only when needed
         const shouldUpdateRankings = !this.rankingUpdateCounter || this.rankingUpdateCounter % (isVeryLargeRace ? 10 : 5) === 0;
+        
+        // Cache previous leader for smooth transitions
+        const previousLeader = this.rankings.length > 0 ? this.rankings[0] : null;
+        
         if (shouldUpdateRankings) {
-            const oldRankings = [...this.rankings];
             this.rankings = [...this.ducks].sort((a, b) => b.position - a.position);
         }
         
         if (this.rankings.length > 0) {
-            const leader = this.rankings[0];
-            const distanceToFinish = this.trackLength - leader.position;
+            let leader = this.rankings[0];
+            
+            // ========================================
+            // CAMERA FOCUS ON TOP GROUP (not single duck) - MUCH SMOOTHER!
+            // ========================================
+            // Calculate average position of top 3-5 ducks to reduce camera shake
+            // This prevents camera from following individual duck animations
+            const topGroupSize = Math.min(5, this.rankings.length); // Top 5 or less if fewer ducks
+            let groupPositionSum = 0;
+            
+            for (let i = 0; i < topGroupSize; i++) {
+                groupPositionSum += this.rankings[i].position;
+            }
+            
+            // Average position of leading group
+            let leaderPosition = groupPositionSum / topGroupSize;
+            
+            const distanceToFinish = this.trackLength - leaderPosition;
             
             // Log thông tin vịt dẫn đầu real-time với tốc độ và delta time
             const leaderSpeed = leader.speed || 0;
@@ -3069,140 +3252,153 @@ class Game {
                 console.log(`[${elapsed.toFixed(1)}s] Leader: ${leader.name} | Pos: ${leader.position.toFixed(0)}/${this.trackLength} (${(leader.position/this.trackLength*100).toFixed(1)}%) | Speed: ${effectiveSpeed.toFixed(2)} px/frame | ETA: ${estimatedTimeToFinish.toFixed(1)}s | Delta: ${this.deltaTime.toFixed(3)}`);
             }
             
-            // Calculate average speed of top 10 ducks for background sync
+            // Calculate top ducks for both background sync and camera velocity matching
             const topDucks = this.rankings.slice(0, Math.min(10, this.rankings.length));
             const avgSpeed = topDucks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / topDucks.length;
             
-            // Background speed synchronized with duck movement (like Dinosaur Game)
-            // Base speed scaled by average duck speed for realistic motion
-            let backgroundSpeed = avgSpeed * 2.5; // Multiply for visual effect
-            let duckVisualSpeed = 0; // Visual speed for duck animation when background stops
+            // Background speed synchronized with leader duck movement
+            let backgroundSpeed = avgSpeed * 2.5;
+            let duckVisualSpeed = 0;
             
-            // Declare camera variables with default values
-            let targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
-            let cameraMaxOffset = this.trackLength - this.viewportWidth;
-            let cameraSpeed = 0.15;
+            // ========================================
+            // SIMPLE CAMERA ALGORITHM - FOCUS ON GROUP AVERAGE
+            // ========================================
             
-            // Finish line reveal and animation logic:
-            // Reveal finish line when leader is 2.5 viewport widths away (increased from 1.5)
-            // This ensures finish line appears earlier and has time to slide from right to left
+            // Leader group positioned at 40% from left edge (slightly left of center for forward view)
+            let leaderScreenPosition = 0.4;
+            
+            // When approaching finish line, shift camera RIGHT to show finish line + space for ducks to cross
+            const finishLineRevealDistance = this.viewportWidth * 2.0; // Hiển sớm hơn (2.0 thay vì 1.5)
+            
+            // Store whether we're in finish approach zone
+            const inFinishApproach = distanceToFinish <= finishLineRevealDistance;
+            
+            if (inFinishApproach) {
+                // Calculate camera shift based on distance to finish
+                // Gradually shift camera right as leader approaches finish
+                const shiftProgress = Math.max(0, Math.min(1, (finishLineRevealDistance - distanceToFinish) / finishLineRevealDistance));
+                
+                // Shift camera right by moving leader's screen position from 0.4 to 0.2 (20% from left)
+                // This creates 80% viewport space on the right for finish line + crossing space
+                leaderScreenPosition = 0.4 - (shiftProgress * 0.2); // 0.4 -> 0.2
+            }
+            
+            // ========================================
+            // CONSTANT VELOCITY CAMERA WITH INERTIA
+            // Priority: SMOOTH (constant speed) > Following exactly
+            // ========================================
+            
+            // Calculate target camera position using GROUP AVERAGE POSITION
+            let targetCameraOffset = leaderPosition - (this.viewportWidth * leaderScreenPosition);
+            
+            // Calculate distance from target
+            const distance = targetCameraOffset - this.cameraOffset;
+            
+            // VELOCITY MATCHING: Match camera velocity with leader group velocity
+            // Use top 5 ducks from the topDucks array already calculated above
+            const topGroup = topDucks.slice(0, Math.min(5, topDucks.length));
+            const avgLeaderVelocity = topGroup.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed) * this.smoothedDeltaTime, 0) / topGroup.length;
+            
+            // Target velocity = leader velocity (constant speed = smooth)
+            let targetVelocity = avgLeaderVelocity;
+            
+            // ONLY use safe zone check when NOT in finish approach
+            // This prevents conflict between finish approach shift and boundary correction
+            if (!inFinishApproach) {
+                const safeZoneStart = this.viewportWidth * 0.2;  // 20% from left
+                const safeZoneEnd = this.viewportWidth * 0.8;    // 80% from left
+                const leaderScreenPos = leaderPosition - this.cameraOffset;
+                
+                // If leader is outside safe zone, gradually adjust velocity to bring it back
+                if (leaderScreenPos < safeZoneStart) {
+                    // Leader too far left - slow down camera
+                    const correction = (safeZoneStart - leaderScreenPos) * 0.02;
+                    targetVelocity = avgLeaderVelocity - correction;
+                } else if (leaderScreenPos > safeZoneEnd) {
+                    // Leader too far right - speed up camera
+                    const correction = (leaderScreenPos - safeZoneEnd) * 0.02;
+                    targetVelocity = avgLeaderVelocity + correction;
+                }
+            }
+            
+            // INERTIA: Smoothly interpolate current velocity toward target velocity
+            // High inertia = smooth movement, low responsiveness
+            const inertiaFactor = 0.95; // Increased from 0.92 for even smoother camera movement
+            const oldVelocity = this.cameraVelocity;
+            this.cameraVelocity = this.cameraVelocity * inertiaFactor + targetVelocity * (1 - inertiaFactor);
+            
+            // Safety clamp to prevent extreme speeds
+            const maxVelocity = 60;
+            this.cameraVelocity = Math.max(-maxVelocity, Math.min(maxVelocity, this.cameraVelocity));
+            
+            // Update camera position with constant-ish velocity
+            const oldCameraOffset = this.cameraOffset;
+            this.cameraOffset += this.cameraVelocity;
+            
+            // CRITICAL FIX: Round camera offset to integer pixels
+            // This prevents sub-pixel movement that causes icon jitter
+            // Duck icons will move smoothly by whole pixels only
+            this.cameraOffset = Math.round(this.cameraOffset);
+            
+            // LOG CAMERA MOVEMENT every 10 frames
+            if (!this.cameraLogCounter) this.cameraLogCounter = 0;
+            this.cameraLogCounter++;
+            if (this.cameraLogCounter % 10 === 0) {
+                const velocityChange = Math.abs(this.cameraVelocity - oldVelocity);
+                const offsetChange = Math.abs(this.cameraOffset - oldCameraOffset);
+                console.log(`📹 Camera | Vel: ${this.cameraVelocity.toFixed(2)} (Δ${velocityChange.toFixed(2)}) | Offset: ${this.cameraOffset.toFixed(0)} (Δ${offsetChange.toFixed(2)}) | Target: ${targetVelocity.toFixed(2)} | DeltaT: ${this.deltaTime.toFixed(3)}/${this.smoothedDeltaTime.toFixed(3)} | InFinish: ${inFinishApproach}`);
+            }
+            
+            // Allow camera to go beyond normal bounds to show finish line
+            // Add extra space = 25% viewport to see finish line + ducks crossing
+            const cameraMaxOffset = this.trackLength - (this.viewportWidth * 0.75); // Allow camera to go further
+            
+            // Finish line reveal - show when leader is close
             const finishLine = document.getElementById('finishLine');
             
-            if (distanceToFinish <= this.viewportWidth * 2.5) {
-                // Reveal finish line early
+            if (distanceToFinish <= finishLineRevealDistance) {
+                // Reveal finish line
                 if (finishLine && finishLine.classList.contains('hidden')) {
                     finishLine.classList.remove('hidden');
-                    this.finishLinePreviewStartTime = Date.now();
-                    console.log(`[Finish Line] 🏁 REVEALED at distance: ${distanceToFinish.toFixed(0)}px | Viewport: ${this.viewportWidth}px | Leader pos: ${leader.position.toFixed(0)}px | Track length: ${this.trackLength}px`);
+                    console.log(`%c[Finish Line] 🏁 REVEALED! Distance: ${distanceToFinish.toFixed(0)}px | Leader will shift from 40% to 20%`, 'color: #FFD700; font-weight: bold; font-size: 16px;');
+                }
+                // Force visibility
+                if (finishLine) {
+                    finishLine.style.display = 'flex';
                 }
             }
             
-            // Always update finish line position when visible (relative to camera)
+            // Update finish line position (at actual track end)
             if (finishLine && !finishLine.classList.contains('hidden')) {
-                finishLine.style.left = (this.trackLength - this.cameraOffset) + 'px';
-            }
-            
-            // Preview animation: Pan to finish line, then return to leader
-            const timeSinceReveal = this.finishLinePreviewStartTime > 0 ? (Date.now() - this.finishLinePreviewStartTime) / 1000 : 999;
-            const previewDuration = 3.0; // 3.0 seconds preview (increased from 1.5s for better visibility)
-            const returnDuration = 1.5; // 1.5 seconds to return (increased from 1.0s)
-            
-            // Camera and background logic based on distance to finish
-            if (distanceToFinish <= this.viewportWidth * 2.5 && distanceToFinish > this.viewportWidth * 1.5) {
-                // PHASE 0: Preview phase - show finish line then return to leader
+                const finishScreenX = this.trackLength - this.cameraOffset;
+                finishLine.style.left = finishScreenX + 'px';
                 
-                if (timeSinceReveal < previewDuration) {
-                    // Pan camera to show finish line on screen (reveal phase)
-                    const previewProgress = Math.min(1, timeSinceReveal / previewDuration);
-                    const panToFinish = this.viewportWidth * 0.7 * previewProgress; // Pan 70% viewport forward
-                    
-                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panToFinish;
-                    cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.1;
-                    
-                    console.log(`[Preview] Panning to finish line... ${(previewProgress * 100).toFixed(0)}%`);
-                } else if (timeSinceReveal < previewDuration + returnDuration) {
-                    // Return camera to leader
-                    const returnProgress = (timeSinceReveal - previewDuration) / returnDuration;
-                    const panToFinish = this.viewportWidth * 0.7 * (1 - returnProgress); // Pan back
-                    
-                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6) + panToFinish;
-                    cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.1;
-                    
-                    if (!this.finishLinePreviewShown) {
-                        console.log(`[Preview] Returning to leader...`);
-                        this.finishLinePreviewShown = true;
-                    }
-                } else {
-                    // Preview done, normal follow
-                    targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
-                    cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.15;
+                // Debug: Log finish line position occasionally
+                if (Math.random() < 0.01) { // 1% chance per frame
+                    console.log(`🏁 Finish Line | Screen X: ${finishScreenX.toFixed(0)}px | Viewport: ${this.viewportWidth}px | Visible: ${finishScreenX >= -100 && finishScreenX <= this.viewportWidth + 100}`);
                 }
-            } else if (distanceToFinish <= this.viewportWidth * 1.5) {
-                // When leader is within 1.5 viewport widths from finish
-                // Start positioning leader on right edge and gradually move to center
-                
-                if (distanceToFinish <= this.viewportWidth * 0.5) {
-                    // Very close (< 0.5 viewport): Center the finish line
-                    const slowdownFactor = distanceToFinish / (this.viewportWidth * 0.5);
-                    
-                    targetCameraOffset = this.trackLength - (this.viewportWidth / 2);
-                    cameraMaxOffset = this.trackLength - (this.viewportWidth / 2);
-                    cameraSpeed = 0.15 * slowdownFactor;
-                    
-                    // Slow down background
-                    backgroundSpeed = backgroundSpeed * slowdownFactor;
-                    duckVisualSpeed = avgSpeed * (1.0 - slowdownFactor) * 0.5;
-                } else {
-                    // Between 1.5 and 0.5 viewport: Gradually move leader from right edge to center
-                    // Progress: 0.0 at 1.5 viewport, 1.0 at 0.5 viewport
-                    const transitionProgress = (this.viewportWidth * 1.5 - distanceToFinish) / this.viewportWidth;
-                    
-                    // Leader position on screen: from 80% (right edge) to 50% (center)
-                    const leaderScreenPosition = 0.8 - (transitionProgress * 0.3); // 0.8 -> 0.5
-                    
-                    targetCameraOffset = leader.position - (this.viewportWidth * leaderScreenPosition);
-                    cameraMaxOffset = this.trackLength - this.viewportWidth;
-                    cameraSpeed = 0.015; // Very slow constant speed (reduced from 0.03)
-                }
-            } else {
-                // Normal camera follow (leader at 60% from left)
-                targetCameraOffset = leader.position - (this.viewportWidth * 0.6);
-                cameraMaxOffset = this.trackLength - this.viewportWidth;
-                cameraSpeed = 0.15;
             }
             
-            // Smooth camera target with lerp to prevent snapping when leader changes
-            // Skip smoothing during finish line reveal to maintain constant speed
-            const isFinishLineReveal = distanceToFinish <= this.viewportWidth * 1.5 && distanceToFinish > this.viewportWidth * 0.5;
-            
-            if (isFinishLineReveal) {
-                // Direct camera movement for constant speed (no double lerp)
-                this.smoothCameraTarget = targetCameraOffset;
-            } else {
-                // Normal smoothing for leader changes
-                const targetSmoothSpeed = 0.08;
-                this.smoothCameraTarget += (targetCameraOffset - this.smoothCameraTarget) * targetSmoothSpeed;
+            // When very close to finish line (< 0.5 viewport), slow down background for dramatic effect
+            if (distanceToFinish <= this.viewportWidth * 0.5) {
+                const slowdownFactor = Math.max(0.3, distanceToFinish / (this.viewportWidth * 0.5));
+                backgroundSpeed = backgroundSpeed * slowdownFactor;
+                duckVisualSpeed = avgSpeed * (1.0 - slowdownFactor) * 0.5;
             }
             
-            // Apply smoothed target with additional lerp for final camera position
-            this.cameraOffset += (this.smoothCameraTarget - this.cameraOffset) * cameraSpeed;
-            
-            // Prevent camera from moving backwards (creates illusion of ducks running backwards)
-            // Only allow forward movement or stay in place
+            // Prevent camera from moving backwards (always move forward or stay)
             if (this.cameraOffset < this.lastCameraOffset) {
                 this.cameraOffset = this.lastCameraOffset;
+                this.cameraVelocity = 0; // Reset velocity when stopped
             }
             this.lastCameraOffset = this.cameraOffset;
             
-            // Clamp camera within bounds
+            // Clamp camera within track bounds
             this.cameraOffset = Math.max(0, Math.min(cameraMaxOffset, this.cameraOffset));
             
             // Update background with smooth interpolation
             this.targetBackgroundOffset += backgroundSpeed * this.deltaTime;
-            const backgroundSmoothSpeed = 0.12; // Smooth background scrolling
+            const backgroundSmoothSpeed = 0.25; // Smooth background scrolling (increased for better sync)
             this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
             
             // Store visual speed for duck animation
@@ -3213,7 +3409,7 @@ class Game {
                 ? this.ducks.reduce((sum, duck) => sum + (duck.speed || duck.baseSpeed), 0) / this.ducks.length
                 : 3.5; // Default base speed
             this.targetBackgroundOffset += (allDucksSpeed * 2.5) * this.deltaTime;
-            const backgroundSmoothSpeed = 0.12;
+            const backgroundSmoothSpeed = 0.25; // Match updated smooth speed
             this.backgroundOffset += (this.targetBackgroundOffset - this.backgroundOffset) * backgroundSmoothSpeed;
             
             this.duckVisualSpeed = 0;
@@ -3289,6 +3485,82 @@ class Game {
                 }
             }
         });
+        
+        // Lane management for top ducks approaching finish line
+        this.manageLanes();
+    }
+    
+    manageLanes() {
+        if (!this.rankings || this.rankings.length === 0) return;
+        
+        const leader = this.rankings[0];
+        const distanceToFinish = this.trackLength - leader.position;
+        const laneManagementZone = this.viewportWidth * 1.5; // Start managing lanes 1.5 viewports from finish
+        
+        // Only manage lanes when approaching finish
+        if (distanceToFinish > laneManagementZone) return;
+        
+        const currentTime = Date.now();
+        
+        // Get top ducks in finish zone
+        const topDuckCount = Math.min(20, this.rankings.length);
+        const topDucks = this.rankings.slice(0, topDuckCount);
+        
+        // Group ducks by their current lane
+        const NUM_LANES = 5; // Use 5 lanes for smoother transitions
+        const lanes = Array.from({ length: NUM_LANES }, () => []);
+        
+        topDucks.forEach(duck => {
+            const safeLane = Math.max(0, Math.min(NUM_LANES - 1, duck.lane));
+            lanes[safeLane].push(duck);
+        });
+        
+        // Check for lane conflicts and reassign (one duck at a time)
+        lanes.forEach((ducksInLane, laneIndex) => {
+            if (ducksInLane.length > 1) {
+                // Sort by position (furthest first gets priority to stay)
+                ducksInLane.sort((a, b) => b.position - a.position);
+                
+                // Only first duck stays, others must move
+                for (let i = 1; i < ducksInLane.length; i++) {
+                    const duck = ducksInLane[i];
+                    
+                    // Check cooldown - don't move if recently changed lane
+                    if (currentTime - duck.lastLaneChangeTime < duck.laneChangeCooldown) {
+                        continue; // Skip this duck, still in cooldown
+                    }
+                    
+                    // Find least crowded ADJACENT lane (only +1 or -1 from current lane)
+                    const possibleLanes = [];
+                    if (laneIndex > 0) possibleLanes.push(laneIndex - 1); // Lane above
+                    if (laneIndex < NUM_LANES - 1) possibleLanes.push(laneIndex + 1); // Lane below
+                    
+                    if (possibleLanes.length === 0) continue; // No adjacent lanes available
+                    
+                    // Choose least crowded adjacent lane
+                    let bestLane = laneIndex;
+                    let minCount = ducksInLane.length;
+                    
+                    for (const adjacentLane of possibleLanes) {
+                        if (lanes[adjacentLane].length < minCount) {
+                            minCount = lanes[adjacentLane].length;
+                            bestLane = adjacentLane;
+                        }
+                    }
+                    
+                    // Move duck to new lane if it's better
+                    if (bestLane !== laneIndex && minCount < ducksInLane.length) {
+                        duck.lane = bestLane;
+                        duck.lastLaneChangeTime = currentTime; // Record lane change time
+                        lanes[bestLane].push(duck);
+                        console.log(`🎯 Lane switch: ${duck.name} | ${laneIndex} → ${bestLane} | Cooldown: ${duck.laneChangeCooldown}ms`);
+                        
+                        // Only move ONE duck per frame to avoid chaos
+                        break;
+                    }
+                }
+            }
+        });
     }
     
     updateDuckPositions() {
@@ -3326,13 +3598,17 @@ class Game {
                     const topPadding = this.trackHeight * 0.02;
                     const bottomPadding = this.trackHeight * 0.02;
                     const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
-                    const laneHeight = availableHeight / (this.duckCount - 1);
-                    const index = this.ducks.indexOf(duck);
+                    
+                    // Calculate lane position based on duck.lane (0-4: 5 lanes)
+                    const NUM_DISPLAY_LANES = 5;
+                    const laneHeight = availableHeight / (NUM_DISPLAY_LANES - 1);
+                    const targetLane = Math.max(0, Math.min(NUM_DISPLAY_LANES - 1, duck.lane || 0));
                     
                     duckEl = document.createElement('div');
                     duckEl.className = 'duck-element';
-                    duckEl.style.top = `${topPadding + index * laneHeight}px`;
+                    duckEl.style.top = `${topPadding + targetLane * laneHeight}px`;
                     duckEl.style.left = '0px';
+                    duckEl.style.transition = 'top 0.5s ease-out'; // Smooth lane transitions
                     
                     if (this.imagesLoaded && this.duckImages.length > 0) {
                         const iconIndex = (duck.id - 1) % this.duckImages.length;
@@ -3361,9 +3637,8 @@ class Game {
                     this.duckElements.set(duck.id, duckEl);
                 }
                 
-                // Batch style updates
-                const visualOffset = this.duckVisualSpeed ? Math.sin(Date.now() * 0.005) * this.duckVisualSpeed * 5 : 0;
-                const newLeft = screenX + visualOffset;
+                // Batch style updates - only use cameraOffset-adjusted screenX
+                const newLeft = screenX;
                 
                 // Only update if position changed significantly (>1px)
                 if (!duck._lastScreenX || Math.abs(newLeft - duck._lastScreenX) > 1) {
@@ -3372,6 +3647,24 @@ class Game {
                         duckEl.style.display = '';
                     });
                     duck._lastScreenX = newLeft;
+                }
+                
+                // Update lane position dynamically
+                const duckHeight = this.trackHeight * 0.5;
+                const topPadding = this.trackHeight * 0.02;
+                const bottomPadding = this.trackHeight * 0.02;
+                const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
+                const NUM_DISPLAY_LANES = 5;
+                const laneHeight = availableHeight / (NUM_DISPLAY_LANES - 1);
+                const targetLane = Math.max(0, Math.min(NUM_DISPLAY_LANES - 1, duck.lane || 0));
+                const newTop = topPadding + targetLane * laneHeight;
+                
+                // Update top position if lane changed
+                if (!duck._lastTop || Math.abs(newTop - duck._lastTop) > 1) {
+                    domUpdates.push(() => {
+                        duckEl.style.top = `${newTop}px`;
+                    });
+                    duck._lastTop = newTop;
                 }
                 
                 // Skip wobble animation for large races (500+ ducks)
@@ -3427,31 +3720,44 @@ class Game {
         const topPadding = this.trackHeight * 0.02;
         const bottomPadding = this.trackHeight * 0.02;
         const availableHeight = this.trackHeight - topPadding - bottomPadding - duckHeight;
-        const laneHeight = availableHeight / Math.max(1, this.duckCount - 1);
+        
+        // Use lane system for positioning
+        const NUM_DISPLAY_LANES = 5;
+        const laneHeight = availableHeight / (NUM_DISPLAY_LANES - 1);
         
         // Viewport culling for canvas
         const viewportStart = this.cameraOffset - this.viewportBuffer;
         const viewportEnd = this.cameraOffset + this.viewportWidth + this.viewportBuffer;
         
         let drawnCount = 0;
-        const visualOffset = this.duckVisualSpeed ? Math.sin(Date.now() * 0.005) * this.duckVisualSpeed * 5 : 0;
         
         // Draw all visible ducks
         this.ducks.forEach((duck, index) => {
-            const screenX = duck.position - this.cameraOffset;
+            // ANTI-JITTER: Round both duck position and use rounded camera offset
+            // This ensures icon moves by whole pixels only
+            const roundedDuckPos = Math.round(duck.position);
+            const screenX = roundedDuckPos - this.cameraOffset;
             const isVisible = duck.position >= viewportStart && duck.position <= viewportEnd;
+            
+            // DEBUG: Log first duck position changes
+            if (index === 0 && this.cameraLogCounter % 5 === 0) {
+                console.log(`🦆 Duck[0] | RawPos: ${duck.position.toFixed(2)} | RoundPos: ${roundedDuckPos} | CamOffset: ${this.cameraOffset} | ScreenX: ${screenX} | Speed: ${duck.speed.toFixed(2)}`);
+            }
             
             if (!isVisible) return;
             
             drawnCount++;
             
-            // Calculate Y position
-            const yPos = topPadding + index * laneHeight;
+            // Calculate Y position using lane system
+            const targetLane = Math.max(0, Math.min(NUM_DISPLAY_LANES - 1, duck.lane || 0));
+            const yPos = topPadding + targetLane * laneHeight;
             const wobble = duck.getWobble(Date.now());
             const laneShift = duck.laneOffset || 0;
-            const finalY = yPos + wobble + laneShift;
+            // ANTI-JITTER: Round Y position as well
+            const finalY = Math.round(yPos + wobble + laneShift);
             
-            const finalX = screenX + visualOffset;
+            // ANTI-JITTER: Round X position to prevent icon jitter
+            const finalX = Math.round(screenX);
             
             // Draw duck image if loaded
             if (this.imagesLoaded && this.duckImages.length > 0) {
@@ -3473,7 +3779,7 @@ class Game {
             
             // Draw name label for ALL visible ducks (phía TRƯỚC icon - bên trái, căn giữa theo chiều dọc)
             // Font size scales với số lượng ducks
-            const fontSize = this.duckCount > 500 ? 10 : (this.duckCount > 200 ? 12 : 14);
+            const fontSize = this.duckCount > 500 ? 24 : (this.duckCount > 200 ? 28 : 32);
             this.ctx.font = `bold ${fontSize}px Arial`;
             this.ctx.fillStyle = 'white';
             this.ctx.strokeStyle = 'black';
@@ -3488,8 +3794,9 @@ class Game {
             const textWidth = textMetrics.width;
             
             // Position: Bên TRÁI icon, căn giữa theo chiều dọc
-            const textX = finalX - textWidth - 5; // 5px gap from icon, text positioned to the left
-            const textY = finalY + (duckHeight / 2) + (fontSize / 3); // Căn giữa theo icon (baseline adjustment)
+            // ANTI-JITTER: Round text positions to prevent duck-name jitter
+            const textX = Math.round(finalX - textWidth - 5); // 5px gap from icon, text positioned to the left
+            const textY = Math.round(finalY + (duckHeight / 2) + (fontSize / 3)); // Căn giữa theo icon (baseline adjustment)
             
             // Draw with outline for better visibility
             this.ctx.strokeText(name, textX, textY);
